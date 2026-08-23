@@ -1,6 +1,6 @@
 name: admin_api_key_manager
 description: Drop-in Flutter package for managing a Firestore-backed pool of admin API keys with failover, cooldowns, health checks, and an admin UI.
-version: 1.0.0
+version: 1.1.0
 homepage: https://github.com/Keshab1997/admin_api_key_manager
 repository: https://github.com/Keshab1997/admin_api_key_manager
 issue_tracker: https://github.com/Keshab1997/admin_api_key_manager/issues
@@ -18,8 +18,13 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  cloud_firestore: ^5.0.0
-  firebase_core: ^3.0.0
+  # Deliberately wide. This package only uses long-stable Firestore surface —
+  # collection/doc/get/set/update/delete/where/orderBy/limit/snapshots/batch,
+  # FieldValue and Timestamp — none of which changed across these majors.
+  # Pinning to a single major stopped it installing next to an app already on
+  # Firestore 6 / firebase_core 4, which is the whole point of a shared package.
+  cloud_firestore: '>=5.0.0 <7.0.0'
+  firebase_core: '>=3.0.0 <5.0.0'
   hive_flutter: ^1.1.0
   http: ^1.2.0
 

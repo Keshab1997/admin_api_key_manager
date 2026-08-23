@@ -32,6 +32,18 @@ Flutter project without copy-pasting.
 
 ## Installation
 
+### Compatibility
+
+| | Supported |
+|---|---|
+| `cloud_firestore` | 5.x and 6.x |
+| `firebase_core` | 3.x and 4.x |
+| Dart / Flutter | Dart ^3.3, Flutter >= 3.19 |
+
+The Firestore constraint is intentionally wide: the package only touches
+long-stable API surface, and pinning a single major stopped it installing
+alongside apps already on Firestore 6.
+
 ### Option A — Git dependency (easiest)
 
 ```yaml
@@ -39,7 +51,7 @@ dependencies:
   admin_api_key_manager:
     git:
       url: https://github.com/Keshab1997/admin_api_key_manager
-      ref: main
+      ref: master
 ```
 
 ### Option B — Local path
