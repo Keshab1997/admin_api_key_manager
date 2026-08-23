@@ -1,5 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// The endpoint and model that go together for a given provider.
+class ProviderDefaults {
+  final String baseUrl;
+  final String model;
+
+  const ProviderDefaults({required this.baseUrl, required this.model});
+}
+
 /// A single admin-managed API key (Gemini / OpenRouter / any OpenAI-compatible
 /// /chat/completions endpoint). Stored in Firestore `admin_api_keys`.
 class AdminApiKey {
@@ -40,6 +48,60 @@ class AdminApiKey {
     required this.createdAt,
     required this.updatedAt,
   });
+
+  /// The endpoint and model a provider is normally used with.
+  ///
+  /// Lives next to [inferProvider] on purpose: one maps a URL to a provider,
+  /// the other a provider to a URL, and keeping them apart is how they drift.
+  ///
+  /// `custom` is deliberately absent — the whole point of that option is an
+  /// endpoint only the admin knows.
+  static const Map<String, ProviderDefaults> providerDefaults = {
+    'openrouter': ProviderDefaults(
+      baseUrl: 'https://openrouter.ai/api/v1',
+      // OpenRouter addresses models as `provider/model`. Spelling it out keeps
+      // the field identical to what the OpenRouter dashboard shows.
+      model: 'openai/gpt-4o-mini',
+    ),
+    'google': ProviderDefaults(
+      // Must include the API version: callers build
+      // `$baseUrl/models/$model:generateContent`.
+      baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+      model: 'gemini-2.0-flash',
+    ),
+  };
+
+  /// Defaults for [provider], or null for `custom`.
+  static ProviderDefaults? defaultsFor(String provider) =>
+      providerDefaults[provider];
+
+  /// True when [baseUrl] is one of the known provider defaults.
+  ///
+  /// Used to decide whether a URL was filled in automatically or typed by the
+  /// admin — an admin's own proxy URL must never be silently replaced.
+  static bool isDefaultBaseUrl(String baseUrl) {
+    final normalised = _normaliseUrl(baseUrl);
+    if (normalised.isEmpty) return true; // nothing to protect
+    return providerDefaults.values
+        .any((d) => _normaliseUrl(d.baseUrl) == normalised);
+  }
+
+  /// True when [model] is one of the known provider defaults.
+  static bool isDefaultModel(String model) {
+    final trimmed = model.trim();
+    if (trimmed.isEmpty) return true;
+    return providerDefaults.values.any((d) => d.model == trimmed) ||
+        // The pre-1.2 default, still sitting in plenty of forms.
+        trimmed == 'gpt-4o-mini';
+  }
+
+  static String _normaliseUrl(String url) {
+    var value = url.trim().toLowerCase();
+    while (value.endsWith('/')) {
+      value = value.substring(0, value.length - 1);
+    }
+    return value;
+  }
 
   /// Infers the provider from a base URL for keys stored before the provider
   /// field existed (zero-migration backfill).

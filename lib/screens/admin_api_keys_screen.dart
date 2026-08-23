@@ -28,10 +28,15 @@ class AdminApiKeysScreen extends StatefulWidget {
 class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
   final _nameCtrl = TextEditingController();
   final _keyCtrl = TextEditingController();
-  final _baseUrlCtrl =
-      TextEditingController(text: 'https://openrouter.ai/api/v1');
-  final _modelCtrl = TextEditingController(text: 'gpt-4o-mini');
-  String _provider = 'custom';
+  // Start on a real provider rather than 'custom' with OpenRouter's URL
+  // already filled in — that combination said two different things at once.
+  static const _initialProvider = 'openrouter';
+
+  final _baseUrlCtrl = TextEditingController(
+      text: AdminApiKey.providerDefaults[_initialProvider]!.baseUrl);
+  final _modelCtrl = TextEditingController(
+      text: AdminApiKey.providerDefaults[_initialProvider]!.model);
+  String _provider = _initialProvider;
   int _priority = 1;
 
   @override
@@ -149,56 +154,133 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
     _showForm(existing: k);
   }
 
+  /// Opens a blank form.
+  ///
+  /// The reset matters: the form's controllers are owned by the screen, so
+  /// without it, opening "add" after editing a key shows that key's values —
+  /// including its secret — and saving would silently clone it.
+  void _showAddForm() {
+    _clearForm();
+    _showForm();
+  }
+
   void _showForm({AdminApiKey? existing}) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (_) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-          left: 16,
-          right: 16,
-          top: 16,
-        ),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(existing != null ? 'Edit API Key' : 'Add API Key',
-                  style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 12),
-              TextField(controller: _nameCtrl, decoration: const InputDecoration(labelText: 'Name')),
-              TextField(controller: _keyCtrl, decoration: const InputDecoration(labelText: 'API Key')),
-              TextField(controller: _baseUrlCtrl, decoration: const InputDecoration(labelText: 'Base URL')),
-              TextField(controller: _modelCtrl, decoration: const InputDecoration(labelText: 'Model')),
-              DropdownButtonFormField<String>(
-                initialValue: _provider,
-                items: const [
-                  DropdownMenuItem(value: 'custom', child: Text('Custom')),
-                  DropdownMenuItem(value: 'openrouter', child: Text('OpenRouter')),
-                  DropdownMenuItem(value: 'google', child: Text('Google AI Studio')),
+      // StatefulBuilder, not the screen's setState: the sheet is built once by
+      // its own route, so calling setState on the parent leaves this subtree
+      // untouched and the provider hint would never appear.
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final defaults = AdminApiKey.defaultsFor(_provider);
+          final urlIsCustom = defaults != null &&
+              _baseUrlCtrl.text.trim() != defaults.baseUrl;
+
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+              left: 16,
+              right: 16,
+              top: 16,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(existing != null ? 'Edit API Key' : 'Add API Key',
+                      style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _nameCtrl,
+                    decoration: const InputDecoration(labelText: 'Name'),
+                  ),
+                  TextField(
+                    controller: _keyCtrl,
+                    decoration: const InputDecoration(labelText: 'API Key'),
+                  ),
+
+                  // Provider first: it decides what the two fields below
+                  // should contain, so choosing it afterwards reads backwards.
+                  DropdownButtonFormField<String>(
+                    initialValue: _provider,
+                    items: const [
+                      DropdownMenuItem(
+                          value: 'openrouter', child: Text('OpenRouter')),
+                      DropdownMenuItem(
+                          value: 'google', child: Text('Google AI Studio')),
+                      DropdownMenuItem(
+                          value: 'custom',
+                          child: Text('Custom (OpenAI-compatible)')),
+                    ],
+                    decoration:
+                        const InputDecoration(labelText: 'Provider'),
+                    onChanged: (v) {
+                      final provider = v ?? 'custom';
+                      final changed = _applyProviderDefaults(provider);
+                      setSheetState(() => _provider = provider);
+                      setState(() {});
+                      if (changed) {
+                        _toast('Base URL and model set for '
+                            '${AdminApiKey.providerName(provider)}');
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 4),
+
+                  TextField(
+                    controller: _baseUrlCtrl,
+                    onChanged: (_) => setSheetState(() {}),
+                    decoration: InputDecoration(
+                      labelText: 'Base URL',
+                      helperText: _provider == 'google'
+                          ? 'Include the API version, e.g. …/v1beta'
+                          : _provider == 'custom'
+                              ? 'Any endpoint serving /chat/completions'
+                              : null,
+                      // Only offered when the admin has typed something of
+                      // their own — never as a nag on the normal path.
+                      suffixIcon: urlIsCustom
+                          ? IconButton(
+                              tooltip: 'Use the '
+                                  '${AdminApiKey.providerName(_provider)} default',
+                              icon: const Icon(Icons.restart_alt, size: 20),
+                              onPressed: () {
+                                _applyProviderDefaults(_provider, force: true);
+                                setSheetState(() {});
+                              },
+                            )
+                          : null,
+                    ),
+                  ),
+                  TextField(
+                    controller: _modelCtrl,
+                    onChanged: (_) => setSheetState(() {}),
+                    decoration: const InputDecoration(labelText: 'Model'),
+                  ),
+
+                  TextFormField(
+                    initialValue: _priority.toString(),
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                        labelText: 'Priority (lower = tried first)'),
+                    onChanged: (v) => _priority = int.tryParse(v) ?? 1,
+                  ),
+                  const SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(sheetContext);
+                      _saveKey(existing);
+                    },
+                    child: Text(
+                        existing != null ? 'Save changes' : 'Add key'),
+                  ),
+                  const SizedBox(height: 16),
                 ],
-                onChanged: (v) => setState(() => _provider = v ?? 'custom'),
-                decoration: const InputDecoration(labelText: 'Provider'),
               ),
-              TextFormField(
-                initialValue: _priority.toString(),
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Priority (lower = tried first)'),
-                onChanged: (v) => _priority = int.tryParse(v) ?? 1,
-              ),
-              const SizedBox(height: 12),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  _saveKey(existing);
-                },
-                child: Text(existing != null ? 'Save changes' : 'Add key'),
-              ),
-              const SizedBox(height: 16),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -206,10 +288,40 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
   void _clearForm() {
     _nameCtrl.clear();
     _keyCtrl.clear();
-    _baseUrlCtrl.text = 'https://openrouter.ai/api/v1';
-    _modelCtrl.text = 'gpt-4o-mini';
-    _provider = 'custom';
+    _provider = _initialProvider;
+    final defaults = AdminApiKey.providerDefaults[_initialProvider]!;
+    _baseUrlCtrl.text = defaults.baseUrl;
+    _modelCtrl.text = defaults.model;
     _priority = 1;
+  }
+
+  /// Applies a provider's endpoint and model when the dropdown changes.
+  ///
+  /// Only overwrites a field that is empty or still holds a known default —
+  /// i.e. one this form filled in. An admin who typed their own proxy URL
+  /// keeps it, and gets an explicit button instead; silently destroying that
+  /// value would make the `custom` provider useless.
+  ///
+  /// Returns true when anything was changed, so the caller can say so.
+  bool _applyProviderDefaults(String provider, {bool force = false}) {
+    final defaults = AdminApiKey.defaultsFor(provider);
+    if (defaults == null) return false; // 'custom' has nothing to apply
+
+    var changed = false;
+
+    if (force || AdminApiKey.isDefaultBaseUrl(_baseUrlCtrl.text)) {
+      if (_baseUrlCtrl.text.trim() != defaults.baseUrl) {
+        _baseUrlCtrl.text = defaults.baseUrl;
+        changed = true;
+      }
+    }
+    if (force || AdminApiKey.isDefaultModel(_modelCtrl.text)) {
+      if (_modelCtrl.text.trim() != defaults.model) {
+        _modelCtrl.text = defaults.model;
+        changed = true;
+      }
+    }
+    return changed;
   }
 
   void _toast(String m) => ScaffoldMessenger.of(context)
@@ -220,7 +332,7 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('API Keys')),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showForm(),
+        onPressed: _showAddForm,
         child: const Icon(Icons.add),
       ),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(

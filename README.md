@@ -27,6 +27,9 @@ Flutter project without copy-pasting.
   shows live numbers.
 - 🖥️ **Minimal admin screen** — list, add, edit, delete, toggle, and
   "test connection" out of the box.
+- 🔗 **Provider-aware form** — picking a provider fills in its base URL and
+  model. A URL you typed yourself is never overwritten; you get an explicit
+  "use default" button instead.
 
 ---
 

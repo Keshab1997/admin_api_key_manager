@@ -1,6 +1,6 @@
 name: admin_api_key_manager
 description: Drop-in Flutter package for managing a Firestore-backed pool of admin API keys with failover, cooldowns, health checks, and an admin UI.
-version: 1.1.0
+version: 1.2.0
 homepage: https://github.com/Keshab1997/admin_api_key_manager
 repository: https://github.com/Keshab1997/admin_api_key_manager
 issue_tracker: https://github.com/Keshab1997/admin_api_key_manager/issues
