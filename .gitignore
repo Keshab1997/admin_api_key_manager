@@ -18,3 +18,5 @@
 .pub-cache/
 .pub/
 build/
+# flutter-builder: see_screen.py downloads screenshots here
+.agent-screens/
