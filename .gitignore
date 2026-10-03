@@ -20,3 +20,6 @@
 build/
 # flutter-builder: see_screen.py downloads screenshots here
 .agent-screens/
+
+# agent-pack --force backups; originals stay in git history
+.agent-pack-backups/
