@@ -35,7 +35,7 @@ jobs:
     # A draft pull request is a scratchpad: capture starts when it is marked
     # ready for review, so iterating stays free.
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
-    uses: Keshab1997/flutter-builder/.github/workflows/ui-screenshots.yml@v1.11.2
+    uses: Keshab1997/flutter-builder/.github/workflows/ui-screenshots.yml@v1.11.3
     with:
       working-directory: "."
       flutter-channel: stable
