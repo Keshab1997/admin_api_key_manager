@@ -339,7 +339,36 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
         stream: _col.orderBy('priority').snapshots(),
         builder: (context, snap) {
           if (snap.hasError) {
-            return Center(child: Text('Error: ${snap.error}'));
+            final error = snap.error.toString();
+            final permissionDenied = error.contains('permission-denied');
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      permissionDenied ? Icons.lock_outline : Icons.error_outline,
+                      size: 42,
+                      color: permissionDenied ? Colors.amber : Colors.redAccent,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      permissionDenied ? 'Admin permission required' : 'Could not load API keys',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      permissionDenied
+                          ? 'Sign in with an account that has the admin claim, then try again.'
+                          : 'Check your connection and try again.',
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            );
           }
           if (!snap.hasData) {
             return const Center(child: CircularProgressIndicator());
@@ -352,9 +381,23 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
             itemCount: docs.length,
             itemBuilder: (context, i) {
               final k = AdminApiKey.fromMap(docs[i].data(), docs[i].id);
-              return ListTile(
-                title: Text(k.name),
-                subtitle: Text('${k.provider} • ${k.model} • pri ${k.priority}'),
+              final maskedKey = k.key.length > 8
+                  ? '${k.key.substring(0, 4)}••••${k.key.substring(k.key.length - 4)}'
+                  : '••••••••';
+              return Card(
+                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                child: ListTile(
+                  title: Row(
+                    children: [
+                      Expanded(child: Text(k.name, overflow: TextOverflow.ellipsis)),
+                      Chip(
+                        label: Text(k.isActive ? 'Active' : 'Disabled'),
+                        visualDensity: VisualDensity.compact,
+                        backgroundColor: k.isActive ? Colors.green.withValues(alpha: .15) : Colors.grey.withValues(alpha: .15),
+                      ),
+                    ],
+                  ),
+                  subtitle: Text('${k.provider} • ${k.model}\n$maskedKey • used ${k.usageCount} • errors ${k.errorCount}'),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -374,6 +417,7 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
                     ),
                   ],
                 ),
+              ),
               );
             },
           );
