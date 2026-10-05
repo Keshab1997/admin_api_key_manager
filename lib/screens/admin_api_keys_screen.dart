@@ -58,6 +58,12 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
       _toast('Name and key are required');
       return;
     }
+    final endpointError = _endpointError(_provider, _baseUrlCtrl.text.trim());
+    final modelError = _modelError(_provider, _modelCtrl.text.trim());
+    if (endpointError != null || modelError != null) {
+      _toast(endpointError ?? modelError!);
+      return;
+    }
     final data = {
       'name': name,
       'key': key,
@@ -89,6 +95,33 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
     }
   }
 
+  String? _endpointError(String provider, String value) {
+    final uri = Uri.tryParse(value);
+    if (value.isEmpty || uri == null || !uri.hasScheme || uri.host.isEmpty) {
+      return 'Enter a valid HTTPS base URL.';
+    }
+    if (uri.scheme != 'https') return 'Base URL must use HTTPS.';
+    if (provider == 'google' &&
+        !value.contains('generativelanguage.googleapis.com')) {
+      return 'Google AI Studio keys require the Google Generative Language URL.';
+    }
+    if (provider == 'openrouter' && !value.contains('openrouter.ai')) {
+      return 'OpenRouter keys require an openrouter.ai base URL.';
+    }
+    return null;
+  }
+
+  String? _modelError(String provider, String value) {
+    if (value.isEmpty) return 'Enter a model name.';
+    if (provider == 'openrouter' && !value.contains('/')) {
+      return 'OpenRouter models use provider/model format.';
+    }
+    if (provider == 'google' && value.contains('/')) {
+      return 'Google model names should not contain a provider prefix.';
+    }
+    return null;
+  }
+
   Future<void> _deleteKey(AdminApiKey k) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -97,9 +130,11 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
         content: Text('Delete "${k.name}"? This cannot be undone.'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
           TextButton(
-              onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete')),
         ],
       ),
     );
@@ -138,7 +173,8 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
             ? 'Connected successfully (HTTP 200).'
             : 'Failed with HTTP $status.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK')),
+          TextButton(
+              onPressed: () => Navigator.pop(context), child: const Text('OK')),
         ],
       ),
     );
@@ -174,8 +210,8 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
       builder: (sheetContext) => StatefulBuilder(
         builder: (context, setSheetState) {
           final defaults = AdminApiKey.defaultsFor(_provider);
-          final urlIsCustom = defaults != null &&
-              _baseUrlCtrl.text.trim() != defaults.baseUrl;
+          final urlIsCustom =
+              defaults != null && _baseUrlCtrl.text.trim() != defaults.baseUrl;
 
           return Padding(
             padding: EdgeInsets.only(
@@ -213,8 +249,7 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
                           value: 'custom',
                           child: Text('Custom (OpenAI-compatible)')),
                     ],
-                    decoration:
-                        const InputDecoration(labelText: 'Provider'),
+                    decoration: const InputDecoration(labelText: 'Provider'),
                     onChanged: (v) {
                       final provider = v ?? 'custom';
                       final changed = _applyProviderDefaults(provider);
@@ -234,10 +269,12 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
                     decoration: InputDecoration(
                       labelText: 'Base URL',
                       helperText: _provider == 'google'
-                          ? 'Include the API version, e.g. …/v1beta'
-                          : _provider == 'custom'
-                              ? 'Any endpoint serving /chat/completions'
-                              : null,
+                          ? 'Google Generative Language API · HTTPS · /v1beta'
+                          : _provider == 'openrouter'
+                              ? 'OpenRouter HTTPS endpoint · /api/v1'
+                              : 'Custom HTTPS endpoint serving /chat/completions',
+                      errorText:
+                          _endpointError(_provider, _baseUrlCtrl.text.trim()),
                       // Only offered when the admin has typed something of
                       // their own — never as a nag on the normal path.
                       suffixIcon: urlIsCustom
@@ -256,7 +293,15 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
                   TextField(
                     controller: _modelCtrl,
                     onChanged: (_) => setSheetState(() {}),
-                    decoration: const InputDecoration(labelText: 'Model'),
+                    decoration: InputDecoration(
+                      labelText: 'Model',
+                      helperText: _provider == 'google'
+                          ? 'Example: gemini-2.0-flash'
+                          : _provider == 'openrouter'
+                              ? 'Example: openai/gpt-4o-mini'
+                              : 'Use the model name expected by your endpoint',
+                      errorText: _modelError(_provider, _modelCtrl.text.trim()),
+                    ),
                   ),
 
                   TextFormField(
@@ -272,8 +317,7 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
                       Navigator.pop(sheetContext);
                       _saveKey(existing);
                     },
-                    child: Text(
-                        existing != null ? 'Save changes' : 'Add key'),
+                    child: Text(existing != null ? 'Save changes' : 'Add key'),
                   ),
                   const SizedBox(height: 16),
                 ],
@@ -324,8 +368,8 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
     return changed;
   }
 
-  void _toast(String m) => ScaffoldMessenger.of(context)
-      .showSnackBar(SnackBar(content: Text(m)));
+  void _toast(String m) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 
   @override
   Widget build(BuildContext context) {
@@ -348,15 +392,20 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      permissionDenied ? Icons.lock_outline : Icons.error_outline,
+                      permissionDenied
+                          ? Icons.lock_outline
+                          : Icons.error_outline,
                       size: 42,
                       color: permissionDenied ? Colors.amber : Colors.redAccent,
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      permissionDenied ? 'Admin permission required' : 'Could not load API keys',
+                      permissionDenied
+                          ? 'Admin permission required'
+                          : 'Could not load API keys',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                      style: const TextStyle(
+                          fontSize: 17, fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 8),
                     Text(
@@ -389,35 +438,39 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
                 child: ListTile(
                   title: Row(
                     children: [
-                      Expanded(child: Text(k.name, overflow: TextOverflow.ellipsis)),
+                      Expanded(
+                          child: Text(k.name, overflow: TextOverflow.ellipsis)),
                       Chip(
                         label: Text(k.isActive ? 'Active' : 'Disabled'),
                         visualDensity: VisualDensity.compact,
-                        backgroundColor: k.isActive ? Colors.green.withValues(alpha: .15) : Colors.grey.withValues(alpha: .15),
+                        backgroundColor: k.isActive
+                            ? Colors.green.withValues(alpha: .15)
+                            : Colors.grey.withValues(alpha: .15),
                       ),
                     ],
                   ),
-                  subtitle: Text('${k.provider} • ${k.model}\n$maskedKey • used ${k.usageCount} • errors ${k.errorCount}'),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                        icon: const Icon(Icons.cable),
-                        tooltip: 'Test connection',
-                        onPressed: () => _testConnection(k)),
-                    IconButton(
-                        icon: const Icon(Icons.edit),
-                        onPressed: () => _edit(k)),
-                    IconButton(
-                        icon: const Icon(Icons.delete),
-                        onPressed: () => _deleteKey(k)),
-                    Switch(
-                      value: k.isActive,
-                      onChanged: (v) => _toggleActive(k, v),
-                    ),
-                  ],
+                  subtitle: Text(
+                      '${k.provider} • ${k.model}\n$maskedKey • used ${k.usageCount} • errors ${k.errorCount}'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                          icon: const Icon(Icons.cable),
+                          tooltip: 'Test connection',
+                          onPressed: () => _testConnection(k)),
+                      IconButton(
+                          icon: const Icon(Icons.edit),
+                          onPressed: () => _edit(k)),
+                      IconButton(
+                          icon: const Icon(Icons.delete),
+                          onPressed: () => _deleteKey(k)),
+                      Switch(
+                        value: k.isActive,
+                        onChanged: (v) => _toggleActive(k, v),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
               );
             },
           );
