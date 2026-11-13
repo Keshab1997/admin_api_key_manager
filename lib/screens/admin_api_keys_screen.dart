@@ -1,5 +1,7 @@
 import 'package:admin_api_key_manager/models/admin_api_key.dart';
 import 'package:admin_api_key_manager/services/api_key_manager.dart';
+import 'package:admin_api_key_manager/screens/admin_bulk.dart';
+import 'package:admin_api_key_manager/screens/admin_error_logs_screen.dart';
 import 'package:admin_api_key_manager/screens/admin_key_groups_screen.dart';
 import 'package:admin_api_key_manager/services/key_health_checker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -124,6 +126,16 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
   final Set<String> _revealed = {};
 
   _Filter _filter = _Filter.all;
+
+  /// The rows as last rendered. The app-bar bulk menu and the reorder action
+  /// act on the whole pool, not on the filtered view — "disable all keys" must
+  /// not quietly mean "all the ones that happen to be visible".
+  List<_Row> _rows = const [];
+
+  /// Drag-to-reorder rewrites `priority` on every row, so it is a mode: an
+  /// accidental drag on a normal list would silently reorder failover.
+  bool _reordering = false;
+  List<_Row> _dragRows = const [];
 
   @override
   void dispose() {
@@ -494,6 +506,101 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
     return changed;
   }
 
+  // ── Bulk actions + reorder ──
+
+  Future<void> _bulk(String action) async {
+    final all = _rows.map((r) => r.key).toList();
+    late final List<AdminApiKey> targets;
+    late final String question;
+
+    switch (action) {
+      case 'enable':
+        targets = keysToEnable(all);
+        question = 'Enable ${targets.length} disabled key(s)?';
+      case 'disable':
+        targets = keysToDisable(all);
+        question = 'Disable ${targets.length} active key(s)? No AI call will '
+            'use them until you turn them back on.';
+      case 'delete':
+        targets = keysSafeToDelete(all);
+        question = 'Permanently delete ${targets.length} disabled key(s) that '
+            'have recorded errors? This cannot be undone.';
+      default:
+        return;
+    }
+
+    if (targets.isEmpty) {
+      _toast(switch (action) {
+        'enable' => 'Every key is already enabled.',
+        'disable' => 'Every key is already disabled.',
+        _ => 'No disabled key has errors, so nothing was deleted.',
+      });
+      return;
+    }
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(switch (action) {
+          'enable' => 'Enable all?',
+          'disable' => 'Disable all?',
+          _ => 'Delete keys?',
+        }),
+        content: Text(question),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(action == 'delete' ? 'Delete' : 'Yes'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    try {
+      switch (action) {
+        case 'enable':
+          await setActive(_col, targets, isActive: true);
+        case 'disable':
+          await setActive(_col, targets, isActive: false);
+        case 'delete':
+          await deleteKeys(_col, targets);
+      }
+      _toast('${targets.length} key(s) updated');
+    } catch (e) {
+      _toast('Bulk update failed: $e');
+    }
+  }
+
+  Future<void> _saveReorder(List<_Row> current) async {
+    final order = _dragRows.isEmpty ? current : _dragRows;
+    // Renumber from 1 across the whole pool, so the numbers stay a clean order
+    // rather than drifting upward every time something is dragged.
+    final assignments = priorityAssignments(order.map((r) => r.key).toList());
+    if (assignments.isEmpty) {
+      setState(() {
+        _reordering = false;
+        _dragRows = const [];
+      });
+      _toast('Order unchanged');
+      return;
+    }
+    try {
+      await applyPriorities(_col, assignments);
+      if (!mounted) return;
+      setState(() {
+        _reordering = false;
+        _dragRows = const [];
+      });
+      _toast('Failover order saved');
+    } catch (e) {
+      _toast('Could not save the order: $e');
+    }
+  }
+
   void _toast(String m) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 
@@ -510,6 +617,15 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
             theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
         actions: [
           IconButton(
+            tooltip: 'Error log',
+            icon: const Icon(Icons.receipt_long_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const AdminErrorLogsScreen(),
+              ),
+            ),
+          ),
+          IconButton(
             tooltip: 'Provider groups',
             icon: const Icon(Icons.tune),
             onPressed: () => Navigator.of(context).push(
@@ -518,6 +634,22 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
               ),
             ),
           ),
+          if (_rows.isNotEmpty)
+            PopupMenuButton<String>(
+              tooltip: 'Bulk actions',
+              icon: const Icon(Icons.more_vert),
+              onSelected: (value) => _bulk(value),
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'enable', child: Text('Enable all keys')),
+                PopupMenuItem(
+                    value: 'disable', child: Text('Disable all keys')),
+                PopupMenuDivider(),
+                PopupMenuItem(
+                  value: 'delete',
+                  child: Text('Delete erroring disabled keys'),
+                ),
+              ],
+            ),
           const SizedBox(width: 4),
         ],
       ),
@@ -543,6 +675,31 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
                   ))
               .toList();
 
+          // Kept in a field because the app-bar bulk menu and the reorder
+          // action operate on the pool, not on the current filter.
+          _rows = rows;
+
+          if (_reordering) {
+            return _ReorderView(
+              rows: _dragRows.isEmpty ? rows : _dragRows,
+              onReorder: (oldIndex, newIndex) {
+                setState(() {
+                  final list =
+                      List<_Row>.from(_dragRows.isEmpty ? rows : _dragRows);
+                  if (newIndex > oldIndex) newIndex -= 1;
+                  final moved = list.removeAt(oldIndex);
+                  list.insert(newIndex, moved);
+                  _dragRows = list;
+                });
+              },
+              onSave: () => _saveReorder(rows),
+              onCancel: () => setState(() {
+                _reordering = false;
+                _dragRows = const [];
+              }),
+            );
+          }
+
           final visible = _applyFilter(rows);
           final broken = rows.where((r) => r.key.errorCount > 0).length;
 
@@ -557,6 +714,23 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
                   onFilter: (f) => setState(() => _filter = f),
                 ),
               ),
+              if (rows.length > 1)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () => setState(() {
+                          _reordering = true;
+                          _dragRows = rows;
+                        }),
+                        icon: const Icon(Icons.swap_vert, size: 18),
+                        label: const Text('Reorder failover'),
+                      ),
+                    ),
+                  ),
+                ),
               if (visible.isEmpty)
                 SliverFillRemaining(
                   hasScrollBody: false,
@@ -615,6 +789,116 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
 }
 
 // ── Pieces ──
+
+/// Drag-to-reorder, in its own mode with an explicit save.
+///
+/// Priorities are rewritten across the pool, so the change is shown before it
+/// is committed: Cancel leaves Firestore untouched.
+class _ReorderView extends StatelessWidget {
+  const _ReorderView({
+    required this.rows,
+    required this.onReorder,
+    required this.onSave,
+    required this.onCancel,
+  });
+
+  final List<_Row> rows;
+  final void Function(int oldIndex, int newIndex) onReorder;
+  final VoidCallback onSave;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Drag to set which key is tried first. Positions become '
+                  'priority 1, 2, 3… when you save.',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ReorderableListView.builder(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+            itemCount: rows.length,
+            onReorderItem: onReorder,
+            itemBuilder: (context, i) {
+              final row = rows[i];
+              return Card(
+                key: ValueKey(row.key.id),
+                margin: const EdgeInsets.only(bottom: 8),
+                elevation: 0,
+                color: theme.colorScheme.surfaceContainerLow,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: BorderSide(color: theme.colorScheme.outlineVariant),
+                ),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    radius: 14,
+                    backgroundColor: theme.colorScheme.primaryContainer,
+                    child: Text(
+                      '${i + 1}',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: theme.colorScheme.onPrimaryContainer,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  title: Text(
+                    row.key.name.isEmpty ? 'Untitled key' : row.key.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    '${AdminApiKey.providerName(row.key.provider)} · '
+                    '${row.key.isActive ? 'enabled' : 'disabled'}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: const Icon(Icons.drag_handle),
+                ),
+              );
+            },
+          ),
+        ),
+        SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: onCancel,
+                    child: const Text('Cancel'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: onSave,
+                    child: const Text('Save order'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 class _Summary extends StatelessWidget {
   const _Summary({

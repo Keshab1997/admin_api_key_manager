@@ -256,6 +256,34 @@ build leaks.
 
 ---
 
+## Error log (admin UI)
+
+`AdminErrorLogsScreen` reads `api_error_logs` — the collection the manager has
+always filled in batches. Read-only by design: the manager's own 30-day sweep
+(and a Firestore TTL policy, if you enable one) is what deletes rows, so a
+screen cannot be the thing that loses the evidence for a report.
+
+It groups by failure kind (rate limit / auth / server / network / other) with
+counts, and shows time-ago, key name and feature per row. No message text is in
+these documents, by design.
+
+```dart
+Navigator.of(context).push(MaterialPageRoute(
+  builder: (_) => const AdminErrorLogsScreen(),
+));
+```
+
+## Bulk actions and failover order
+
+The key screen's overflow menu can enable/disable every key in one Firestore
+batch, and delete the keys that are *both* disabled and erroring (a disabled key
+with a clean record is probably parked on purpose, so the one irreversible
+action never takes it).
+
+"Reorder failover" is a mode: drag the rows, then save. Positions become
+priority 1, 2, 3… across the pool, written in one batch, and only rows whose
+number actually changed are updated. Cancelling writes nothing.
+
 ## Provider groups (admin UI)
 
 `AdminKeyGroupsScreen` writes `admin_key_groups` — enable/disable a provider,
