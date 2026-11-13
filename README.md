@@ -246,8 +246,10 @@ means **the API keys ship to every device**. Anyone who installs the app can
 read them out of Firestore and spend your provider quota; the admin UI is
 protected, the secrets are not.
 
-That is a deliberate MVP trade-off, not an oversight, but it has a direction of
-travel: the endpoint that needs protecting is the *AI call itself*. A proxy
+That is a deliberate MVP trade-off, not an oversight. The full analysis — what
+it costs, what moves where, and a five-step migration that never leaves a
+device broken — is in [`docs/API_SECURITY.md`](docs/API_SECURITY.md). In short,
+it has a direction of travel: the endpoint that needs protecting is the *AI call itself*. A proxy
 (e.g. a Cloud Function) that holds the keys server-side and exposes
 `POST /reply` is the fix, and when that exists this package's selection,
 cooldown and health-check logic belongs behind it, not on the client. Until
