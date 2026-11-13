@@ -11,6 +11,11 @@ class ProviderDefaults {
 /// A single admin-managed API key (Gemini / OpenRouter / any OpenAI-compatible
 /// /chat/completions endpoint). Stored in Firestore `admin_api_keys`.
 class AdminApiKey {
+  /// Firestore document id.
+  ///
+  /// Must survive [toMap]/[fromMap]: the Hive cache round-trips through them, so
+  /// dropping it here gave every cached key an empty id — which broke cooldown
+  /// matching (`keyId` no longer matched) and made per-key reload impossible.
   final String id;
   final String name;
   final String key;
@@ -146,6 +151,9 @@ class AdminApiKey {
 
   Map<String, dynamic> toMap() {
     return {
+      // Not a Firestore field (the doc id is the id) — carried so the Hive
+      // cache can round-trip the model without losing it.
+      'id': id,
       'name': name,
       'key': key,
       'baseUrl': baseUrl,

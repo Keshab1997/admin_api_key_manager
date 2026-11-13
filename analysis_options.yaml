@@ -1,0 +1,21 @@
+# Analysis settings for the package.
+#
+# This file is not cosmetic: `flutter analyze --fatal-infos` is the floor the
+# hosting apps run in CI, and without an `include` here the whole lint set
+# (flutter_lints) was silently inactive — the package was analyzed as if it had
+# no rules at all.
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - build/**
+  language:
+    strict-casts: true
+    strict-raw-types: true
+
+linter:
+  rules:
+    # A package several apps depend on benefits from these; they catch the
+    # mistakes that only surface in a host app (unawaited futures silently
+    # dropping errors, missing `super.dispose()`).
+    unawaited_futures: true

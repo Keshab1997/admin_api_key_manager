@@ -96,9 +96,29 @@ class ApiKeyManager {
 
   // ── Public API ──
 
-  void initialize() {
-    if (_initialized) return;
-    _initialized = true;
+  /// Starts the manager: caches, Firestore listeners and the two timers.
+  ///
+  /// Safe to call without `KeyCache.init()` first — the cache box is opened
+  /// here, which removes the ordering trap this package used to have (the only
+  /// hint was a [StateError] from deep inside the first cache read).
+  ///
+  /// Idempotent, and on failure it stays un-initialized so a later call (e.g.
+  /// after fixing a Firebase configuration problem) can try again. Setting the
+  /// guard before the work would leave every later call a silent no-op.
+  Future<void> initialize() => _initialize();
+
+  Future<void>? _initializing;
+
+  Future<void> _initialize() {
+    if (_initialized) return Future.value();
+    // Two callers racing at startup must not open two sets of listeners.
+    return _initializing ??= _doInitialize().whenComplete(() {
+      _initializing = null;
+    });
+  }
+
+  Future<void> _doInitialize() async {
+    await KeyCache.init();
     _loadFromCache();
     _loadCooldownsFromCache();
     _startFirestoreListener();
@@ -107,6 +127,7 @@ class ApiKeyManager {
     _healthCheckTimer =
         Timer.periodic(_healthCheckInterval, (_) => _runHealthCheck());
     _cleanupExpiredErrorLogs();
+    _initialized = true;
     debugPrint('[ApiKeyManager] initialized');
   }
 
@@ -269,6 +290,9 @@ class ApiKeyManager {
     _batchTimer?.cancel();
     _healthCheckTimer?.cancel();
     _notificationCooldownTimer?.cancel();
+    // Re-armable: without this, `initialize()` after a `dispose()` would return
+    // early and leave the manager permanently dead with every timer gone.
+    _initialized = false;
   }
 
   // ── Private ──

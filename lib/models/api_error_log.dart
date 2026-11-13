@@ -63,6 +63,10 @@ class ApiErrorLog {
       'message': message,
       'retried': retried,
       'retrySuccess': retrySuccess,
+      // `at` is what the Firestore TTL policy is documented against; keep it
+      // in sync with `timestamp` (both `at` and `createdAt` are accepted by the
+      // README's rules sketch, but only one of them was ever written).
+      'at': Timestamp.fromDate(timestamp),
       'timestamp': Timestamp.fromDate(timestamp),
       'ttlExpireAt': Timestamp.fromDate(ttlExpireAt),
     };

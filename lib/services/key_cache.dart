@@ -7,10 +7,12 @@ import 'package:admin_api_key_manager/models/admin_api_key.dart';
 /// the package is drop-in with zero coupling to your app's Hive setup.
 class KeyCache {
   static const String _boxName = 'admin_api_key_manager';
-  static Box? _box;
+  static Box<dynamic>? _box;
 
-  /// Open the cache box. Call this once during app startup (after
-  /// `HiveFlutter.init()`) and before `ApiKeyManager.instance.initialize()`.
+  /// Open the cache box (after `HiveFlutter.init()` / `Hive.initFlutter()`).
+  ///
+  /// `ApiKeyManager.initialize()` calls this itself, so a host app does not have
+  /// to — but calling it early is still fine and stays idempotent.
   static Future<void> init() async {
     if (!Hive.isBoxOpen(_boxName)) {
       _box = await Hive.openBox(_boxName);
@@ -19,7 +21,7 @@ class KeyCache {
     }
   }
 
-  static Box get _b {
+  static Box<dynamic> get _b {
     if (_box == null) {
       throw StateError(
           'KeyCache not initialized. Call KeyCache.init() before use.');
@@ -30,9 +32,11 @@ class KeyCache {
   // ── Admin API keys cache ──
 
   static List<AdminApiKey> getCachedAdminKeys() {
-    final data = _b.get('cachedAdminKeys', defaultValue: <Map>[]) as List;
-    return data.map((m) {
-      final map = Map<String, dynamic>.from(m as Map);
+    final data =
+        _b.get('cachedAdminKeys', defaultValue: <Map<dynamic, dynamic>>[])
+            as List<dynamic>;
+    return data.map<AdminApiKey>((m) {
+      final map = Map<String, dynamic>.from(m as Map<dynamic, dynamic>);
       // Convert ISO strings back to Timestamp
       for (final field in [
         'createdAt',
@@ -71,8 +75,13 @@ class KeyCache {
   /// 401) isn't retried again right after relaunch. Each entry is
   /// {keyId, until (ISO-8601)}.
   static List<Map<String, dynamic>> getCachedAdminKeyCooldowns() {
-    final data = _b.get('adminKeyCooldowns', defaultValue: <Map>[]) as List;
-    return data.map((m) => Map<String, dynamic>.from(m as Map)).toList();
+    final data =
+        _b.get('adminKeyCooldowns', defaultValue: <Map<dynamic, dynamic>>[])
+            as List<dynamic>;
+    return data
+        .map<Map<String, dynamic>>(
+            (m) => Map<String, dynamic>.from(m as Map<dynamic, dynamic>))
+        .toList();
   }
 
   static Future<void> saveCachedAdminKeyCooldowns(
