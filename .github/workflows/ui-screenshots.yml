@@ -1,0 +1,46 @@
+name: Flutter UI screenshots
+
+# Every pull request gets pictures of its screens: the web build is captured in
+# headless Chromium and the images are committed to the `ui-screenshots` branch
+# and commented on the pull request. Nobody (human or agent) has to install the
+# app to see what a change did.
+#
+# Limits worth knowing: this is the *web* build, so layout, colours and spacing
+# are faithful while fonts and platform widgets differ slightly; platform-only
+# plugins (camera, bluetooth, local notifications) do not run on web and the
+# capture job reports a blank screen instead of showing one silently. Images are
+# stills - animations and transitions need the live preview.
+#
+# More screens: list the routes the app navigates to, e.g. routes: "/,/settings".
+# Screens behind a login flow need an integration test, which this pack does not
+# generate yet.
+#
+# Installed by the flutter-builder agent pack:
+#   https://github.com/Keshab1997/flutter-builder#readme
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write # push the images to the ui-screenshots branch
+  pull-requests: write # comment them on the pull request
+
+concurrency:
+  group: ui-screenshots-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ui:
+    # A draft pull request is a scratchpad: capture starts when it is marked
+    # ready for review, so iterating stays free.
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    uses: Keshab1997/flutter-builder/.github/workflows/ui-screenshots.yml@v1.11.3
+    with:
+      working-directory: "."
+      flutter-channel: stable
+      generate-web-platform: true
+      routes: "/"
+      viewports: "390x844,768x1024"
+      embed-in-pr: true
+    secrets: inherit
