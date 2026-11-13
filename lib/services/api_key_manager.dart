@@ -251,18 +251,38 @@ class ApiKeyManager {
   /// Returns health stats for all keys (for admin dashboard).
   List<Map<String, dynamic>> getKeyHealth() {
     return _keyPool.map((k) {
-      final isOnCooldown = _cooldownList.any((c) => c.keyId == k.id);
+      final until = cooldownUntil(k.id);
       return {
         'id': k.id,
         'name': k.name,
         'isActive': k.isActive,
-        'isOnCooldown': isOnCooldown,
+        'isOnCooldown': until != null,
+        // The exact end of the cooldown, so a UI can say "in 4 min" instead of
+        // guessing. Null when the key is healthy. For an auth failure this is
+        // far in the future on purpose (see `_getCooldownDuration`).
+        'cooldownUntil': until?.toIso8601String(),
         'usageCount': k.usageCount,
         'errorCount': k.errorCount,
         'lastErrorAt': k.lastErrorAt?.toIso8601String(),
         'lastUsedAt': k.lastUsedAt?.toIso8601String(),
       };
     }).toList();
+  }
+
+  /// End of the cooldown for [keyId], or null when the key is usable now.
+  ///
+  /// Needed because [getKeyHealth] previously only exposed a boolean: a UI
+  /// could say "cooling down" but never how long for, and the auth-failure
+  /// cooldown is deliberately a year — indistinguishable from a real 60-second
+  /// rate limit without this.
+  DateTime? cooldownUntil(String keyId) {
+    final now = DateTime.now();
+    DateTime? latest;
+    for (final c in _cooldownList) {
+      if (c.keyId != keyId || !c.until.isAfter(now)) continue;
+      if (latest == null || c.until.isAfter(latest)) latest = c.until;
+    }
+    return latest;
   }
 
   void refreshKeys() {

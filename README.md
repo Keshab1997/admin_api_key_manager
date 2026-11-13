@@ -22,7 +22,8 @@ Flutter project without copy-pasting.
   (configurable per provider group), and cooldowns persist across app restarts
   via Hive.
 - ⚕️ **Health checks** — proactively pings the primary key so dead keys are
-  caught before users hit them.
+  caught before users hit them. `cooldownUntil(keyId)` and `getKeyHealth()`
+  expose the exact end of a cooldown, so a UI can say "in 4 min".
 - ⚠️ **All-keys-failed alert** — fires a pluggable callback when every key is
   exhausted (you wire your own push notification).
 - 📊 **Usage & error stats** — written back to Firestore so the admin panel
@@ -254,6 +255,23 @@ then, keep the key pool on keys you can afford to lose and rotate them if a
 build leaks.
 
 ---
+
+## Provider groups (admin UI)
+
+`AdminKeyGroupsScreen` writes `admin_key_groups` — enable/disable a provider,
+rank it, and override the three cooldown durations. The key screen links to it
+from the app bar. Optional: the collection has always been read by
+`ApiKeyManager`, so leaving the screen out only means those values stay
+hand-edited in the console.
+
+```dart
+Navigator.of(context).push(MaterialPageRoute(
+  builder: (_) => const AdminKeyGroupsScreen(),
+));
+```
+
+An empty cooldown field means "use the built-in default" (429 → 60s,
+5xx → 120s, other → 30s), which is deliberately different from `0`.
 
 ## Configuration
 

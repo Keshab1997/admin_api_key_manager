@@ -169,7 +169,7 @@
       <div class="sw on"><i></i></div>
     </div>
     <div class="pills">
-      <span class="pill p-attention">Cooling down</span>
+      <span class="pill p-attention">Cooling down 4m</span>
       <span class="pill p-neutral">P2</span>
       <span class="pill p-danger">3 errors</span>
     </div>
@@ -233,6 +233,46 @@
   </div>
 </div>
 
+<div class="wrap">
+  <p class="caption">Provider groups (new screen, was Firestore-only)</p>
+  <div class="appbar"><h1 style="font-size:20px">Provider groups</h1><span class="ico">⚙</span></div>
+  <p class="lead" style="font-size:12px;color:var(--on-surface-variant);margin:0 0 12px;line-height:1.5">
+    Lower priority wins: keys from the best-ranked enabled group carry the load,
+    the rest wait in reserve. Cooldowns are per-device and survive a restart.
+  </p>
+
+  <div class="card">
+    <div class="head">
+      <div style="flex:1">
+        <div class="title">OpenRouter</div>
+        <div class="sub">Enabled · priority 1</div>
+      </div>
+      <div class="sw on"><i></i></div>
+    </div>
+    <div class="sub" style="margin-top:6px">429 60s · 5xx 120s · other 30s</div>
+    <hr>
+    <div class="actions" style="justify-content:flex-start;gap:14px">
+      <span class="act">⇅ Priority</span><span class="act">⏱ Cooldowns</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="head">
+      <div style="flex:1">
+        <div class="title">Google AI Studio</div>
+        <div class="sub">Enabled · priority 2</div>
+      </div>
+      <div class="sw on"><i></i></div>
+    </div>
+    <div class="sub" style="margin-top:6px">429 default · 5xx default · other default</div>
+    <hr>
+    <div class="actions" style="justify-content:flex-start;gap:14px">
+      <span class="act">⇅ Priority</span><span class="act">⏱ Cooldowns</span>
+      <span style="flex:1"></span><span style="font-size:11px;color:var(--on-surface-variant)">defaults</span>
+    </div>
+  </div>
+</div>
+
 <p class="legend">
   <b>What changed, and why it is safe for the host app:</b><br>
   every colour is a <code>ColorScheme</code> role, so the screen follows whatever theme the app installs —
@@ -241,7 +281,11 @@
   a host that already owns a palette registers its own, and a host that registers nothing
   gets the defaults above. State is always a <b>label + colour</b>, never colour alone.<br>
   Keys are masked, reveal is per-row and off by default, and the add-form input is obscured —
-  the old screen showed the full secret in plain text in the list.
+  the old screen showed the full secret in plain text in the list.<br>
+  The <b>Provider groups</b> screen writes <code>admin_key_groups</code>, which until now only existed
+  as data: enabling a provider, ranking it, or overriding a cooldown meant editing Firestore by hand.
+  An empty cooldown field means “use the built-in default” — distinct from 0, which would retry a
+  failing key immediately. Nothing is written until an admin changes something.
 </p>
 
 </body>

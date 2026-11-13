@@ -1,5 +1,6 @@
 import 'package:admin_api_key_manager/models/admin_api_key.dart';
 import 'package:admin_api_key_manager/services/api_key_manager.dart';
+import 'package:admin_api_key_manager/screens/admin_key_groups_screen.dart';
 import 'package:admin_api_key_manager/services/key_health_checker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:material_ui/material_ui.dart';
@@ -89,6 +90,17 @@ class _Row {
 
   bool get isOnCooldown =>
       onCooldownUntil != null && onCooldownUntil!.isAfter(DateTime.now());
+
+  /// "Cooling down" alone hides the interesting part: an auth failure parks a
+  /// key for a year, a rate limit for a minute.
+  String get cooldownLabel {
+    if (!isOnCooldown) return 'Cooling down';
+    final left = onCooldownUntil!.difference(DateTime.now());
+    if (left.inDays >= 300) return 'Rejected — parked';
+    if (left.inDays >= 1) return 'Cooling down ${left.inDays}d';
+    if (left.inHours >= 1) return 'Cooling down ${left.inHours}h';
+    return 'Cooling down ${left.inMinutes + 1}m';
+  }
 }
 
 enum _Filter { all, active, trouble }
@@ -496,6 +508,18 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
         centerTitle: false,
         titleTextStyle:
             theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+        actions: [
+          IconButton(
+            tooltip: 'Provider groups',
+            icon: const Icon(Icons.tune),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const AdminKeyGroupsScreen(),
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showAddForm,
@@ -570,16 +594,10 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
     );
   }
 
-  /// Cooldown, if the manager knows about one for this key. Read-only: the
+  /// Cooldown end for this key, if the manager knows of one. Read-only: the
   /// manager stays the owner of that state.
-  DateTime? _cooldownUntil(String keyId) {
-    for (final entry in ApiKeyManager.instance.getKeyHealth()) {
-      if (entry['id'] == keyId && entry['isOnCooldown'] == true) {
-        return DateTime.now();
-      }
-    }
-    return null;
-  }
+  DateTime? _cooldownUntil(String keyId) =>
+      ApiKeyManager.instance.cooldownUntil(keyId);
 
   List<_Row> _applyFilter(List<_Row> rows) {
     switch (_filter) {
@@ -735,7 +753,7 @@ class _KeyCard extends StatelessWidget {
     final (Color tone, String state) = !k.isActive
         ? (theme.colorScheme.onSurfaceVariant, 'Disabled')
         : row.isOnCooldown
-            ? (palette.attention, 'Cooling down')
+            ? (palette.attention, row.cooldownLabel)
             : k.errorCount > 0
                 ? (palette.danger, 'Has errors')
                 : (palette.healthy, 'Healthy');
