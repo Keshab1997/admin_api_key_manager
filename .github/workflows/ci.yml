@@ -1,0 +1,37 @@
+name: Flutter CI — Format, Analyze & Test
+
+# Runs on every push to master as well as on demand.
+#
+# This package is a dependency of several apps (ReplyMate, SpeakEasy, docify),
+# so a break here lands in three repositories at once — and until this file
+# existed nothing checked it at all: no `test/` directory, no workflow, no
+# `flutter analyze`. The reusable workflow the sibling repos already pin is used
+# instead of a hand-rolled job, so the checks stay identical across them.
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    # Pinned, not `@main`: a change to the shared workflow must not silently
+    # alter what this package is checked against.
+    uses: Keshab1997/flutter-builder/.github/workflows/flutter-build.yml@v1.15.2
+    with:
+      flutter-channel: stable
+      working-directory: "."
+      # lib test only: `.` would also walk generated and build output.
+      format-paths: "lib test"
+      run-format-check: true
+      run-analyze: true
+      run-tests: true
+      code-coverage: true
+      build-apk: false
+      build-aab: false

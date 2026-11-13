@@ -1,5 +1,7 @@
 # admin_api_key_manager
 
+[![Flutter CI](https://github.com/Keshab1997/admin_api_key_manager/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Keshab1997/admin_api_key_manager/actions/workflows/ci.yml)
+
 A **drop-in Flutter package** for managing a Firestore-backed pool of admin API
 keys (Gemini / OpenRouter / any OpenAI-compatible `/chat/completions` endpoint)
 with automatic failover, cooldowns, periodic health checks, batched error
@@ -71,6 +73,18 @@ Then:
 flutter pub get
 ```
 
+### Pinning
+
+`ref: master` follows every push to this repository. Two apps depend on this
+package, so an unrelated change here reaches all of them at once. Once a release
+is tagged, pin the tag instead:
+
+```yaml
+    git:
+      url: https://github.com/Keshab1997/admin_api_key_manager
+      ref: v1.2.0
+```
+
 ---
 
 ## Setup
@@ -84,8 +98,12 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await HiveFlutter.init();          // or Hive.initFlutter()
-  await KeyCache.init();             // <-- package's own Hive box
-  ApiKeyManager.instance.initialize();
+
+  // Opens the package's own Hive box itself and is safe to await. Calling
+  // KeyCache.init() first is optional. (Before 1.2.1 leaving it out threw a
+  // StateError from inside the first cache read, and left the manager
+  // un-initialized for the rest of the process.)
+  await ApiKeyManager.instance.initialize();
 
   // optional: your own push notification when all keys fail
   ApiKeyManager.instance.onAllKeysFailed = (keyCount, message) {
@@ -190,6 +208,21 @@ Allow reads for all users, but only **admin** writes/deletes on
 `admin_api_keys` and `admin_key_groups`. Non-admin devices fail their writes
 silently, which is fine — the first admin device to hit a failure threshold
 does the deactivation.
+
+### Read this before shipping the rules
+
+The rule sketch above — *every* signed-in client may read `admin_api_keys` —
+means **the API keys ship to every device**. Anyone who installs the app can
+read them out of Firestore and spend your provider quota; the admin UI is
+protected, the secrets are not.
+
+That is a deliberate MVP trade-off, not an oversight, but it has a direction of
+travel: the endpoint that needs protecting is the *AI call itself*. A proxy
+(e.g. a Cloud Function) that holds the keys server-side and exposes
+`POST /reply` is the fix, and when that exists this package's selection,
+cooldown and health-check logic belongs behind it, not on the client. Until
+then, keep the key pool on keys you can afford to lose and rotate them if a
+build leaks.
 
 ---
 

@@ -17,7 +17,8 @@ void main() {
         updatedAt: DateTime(2026, 1, 3),
       );
 
-      final restored = AdminApiKey.fromMap(key.toMap(), key.toMap()['id'] as String);
+      final restored =
+          AdminApiKey.fromMap(key.toMap(), key.toMap()['id'] as String);
 
       expect(restored.id, 'doc-123');
       expect(restored.name, 'Primary');
@@ -35,7 +36,8 @@ void main() {
       ).toMap()
         ..remove('id');
 
-      final restored = AdminApiKey.fromMap(legacy, legacy['id'] as String? ?? '');
+      final restored =
+          AdminApiKey.fromMap(legacy, legacy['id'] as String? ?? '');
 
       // The id is lost for that one launch, but nothing throws and the key is
       // usable — the Firestore snapshot replaces it immediately.
@@ -140,41 +142,45 @@ void main() {
       expect((map['at'] as Timestamp).toDate(),
           (map['timestamp'] as Timestamp).toDate());
       // Default retention is +30 days.
-      expect((map['ttlExpireAt'] as Timestamp).toDate(),
-          DateTime(2026, 5, 31));
+      expect((map['ttlExpireAt'] as Timestamp).toDate(), DateTime(2026, 5, 31));
     });
   });
 
   group('resolveOpenRouterModel', () {
     test('leaves non-OpenRouter backends untouched', () {
       expect(
-        resolveOpenRouterModel('https://generativelanguage.googleapis.com/v1beta',
+        resolveOpenRouterModel(
+            'https://generativelanguage.googleapis.com/v1beta',
             'gemini-2.0-flash'),
         'gemini-2.0-flash',
       );
     });
 
     test('leaves an already-prefixed id alone', () {
-      expect(resolveOpenRouterModel('https://openrouter.ai/api/v1',
-          'openai/gpt-4o-mini'),
+      expect(
+          resolveOpenRouterModel(
+              'https://openrouter.ai/api/v1', 'openai/gpt-4o-mini'),
           'openai/gpt-4o-mini');
     });
 
     test('prefixes a bare model name for OpenRouter', () {
-      expect(resolveOpenRouterModel('https://openrouter.ai/api/v1',
-          'gpt-4o-mini'),
+      expect(
+          resolveOpenRouterModel('https://openrouter.ai/api/v1', 'gpt-4o-mini'),
           'openai/gpt-4o-mini');
-      expect(resolveOpenRouterModel('https://openrouter.ai/api/v1',
-          'claude-sonnet-4'),
+      expect(
+          resolveOpenRouterModel(
+              'https://openrouter.ai/api/v1', 'claude-sonnet-4'),
           'anthropic/claude-sonnet-4');
-      expect(resolveOpenRouterModel('https://openrouter.ai/api/v1',
-          'gemini-2.0-flash'),
+      expect(
+          resolveOpenRouterModel(
+              'https://openrouter.ai/api/v1', 'gemini-2.0-flash'),
           'google/gemini-2.0-flash');
     });
 
     test('an unknown bare name is passed through rather than guessed', () {
-      expect(resolveOpenRouterModel('https://openrouter.ai/api/v1',
-          'my-finetune-v3'),
+      expect(
+          resolveOpenRouterModel(
+              'https://openrouter.ai/api/v1', 'my-finetune-v3'),
           'my-finetune-v3');
     });
   });

@@ -18,6 +18,10 @@
 .pub-cache/
 .pub/
 build/
+# A library resolves the host app's versions; committing this lock pinned the
+# package's own dev-time graph and made `pub get` conflicts look like package
+# bugs. Apps that depend on it keep their own lock.
+pubspec.lock
 # flutter-builder: see_screen.py downloads screenshots here
 .agent-screens/
 

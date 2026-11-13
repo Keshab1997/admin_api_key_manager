@@ -38,7 +38,8 @@ void main() {
     test('drops keys of a disabled group', () {
       final keys = [_key('a', provider: 'google'), _key('b')];
       final s = _selector(keys, groups: {
-        'google': const AdminKeyGroup(provider: 'google', name: 'G', enabled: false),
+        'google':
+            const AdminKeyGroup(provider: 'google', name: 'G', enabled: false),
       });
       expect(s.getHealthyKeys().map((k) => k.id), ['b']);
     });
@@ -46,7 +47,8 @@ void main() {
     test('drops keys on a cooldown that has not expired', () {
       final keys = [_key('a'), _key('b')];
       final s = _selector(keys, cooldowns: [
-        KeyCooldown(keyId: 'a', until: DateTime.now().add(const Duration(minutes: 5))),
+        KeyCooldown(
+            keyId: 'a', until: DateTime.now().add(const Duration(minutes: 5))),
       ]);
       expect(s.getHealthyKeys().map((k) => k.id), ['b']);
     });
@@ -54,7 +56,9 @@ void main() {
     test('keeps a key whose cooldown has expired', () {
       final keys = [_key('a')];
       final s = _selector(keys, cooldowns: [
-        KeyCooldown(keyId: 'a', until: DateTime.now().subtract(const Duration(minutes: 5))),
+        KeyCooldown(
+            keyId: 'a',
+            until: DateTime.now().subtract(const Duration(minutes: 5))),
       ]);
       expect(s.getHealthyKeys().map((k) => k.id), ['a']);
     });
@@ -66,8 +70,10 @@ void main() {
         _key('fast-first', provider: 'google', priority: 1),
       ];
       final s = _selector(keys, groups: {
-        'google': const AdminKeyGroup(provider: 'google', name: 'G', priority: 1),
-        'custom': const AdminKeyGroup(provider: 'custom', name: 'C', priority: 2),
+        'google':
+            const AdminKeyGroup(provider: 'google', name: 'G', priority: 1),
+        'custom':
+            const AdminKeyGroup(provider: 'custom', name: 'C', priority: 2),
       });
       expect(
         s.getHealthyKeys().map((k) => k.id),
@@ -78,7 +84,8 @@ void main() {
     test('a provider with no group config sorts last (priority 100)', () {
       final keys = [_key('ungrouped'), _key('grouped', provider: 'google')];
       final s = _selector(keys, groups: {
-        'google': const AdminKeyGroup(provider: 'google', name: 'G', priority: 50),
+        'google':
+            const AdminKeyGroup(provider: 'google', name: 'G', priority: 50),
       });
       expect(s.getHealthyKeys().map((k) => k.id), ['grouped', 'ungrouped']);
     });
@@ -88,8 +95,10 @@ void main() {
     test('returns only the load-carrying group', () {
       final keys = [_key('fast', provider: 'google'), _key('slow')];
       final s = _selector(keys, groups: {
-        'google': const AdminKeyGroup(provider: 'google', name: 'G', priority: 1),
-        'custom': const AdminKeyGroup(provider: 'custom', name: 'C', priority: 2),
+        'google':
+            const AdminKeyGroup(provider: 'google', name: 'G', priority: 1),
+        'custom':
+            const AdminKeyGroup(provider: 'custom', name: 'C', priority: 2),
       });
       expect(s.getTopPriorityPool().map((k) => k.id), ['fast']);
     });

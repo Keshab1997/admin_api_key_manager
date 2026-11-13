@@ -257,10 +257,33 @@ Everything above the end marker is maintained by
 `scripts/install-agent-pack.sh` (re-run the one-liner to update it; your text
 down here is never touched).
 
-- **App:** admin_api_key_manager — one line about what it does.
-- **App directory:** `.` (change this line if the Flutter app lives in a
-  subdirectory).
-- **Extra project rules:** _(fill in: invariants, store metadata that must stay
-  in sync, screenshots that must be regenerated, …)_
-- **Extra verification:** _(fill in: anything CI cannot see — copy changes,
-  Play Console steps, manual checks …)_
+- **App:** admin_api_key_manager — a drop-in Flutter package (not an app): a
+  Firestore-backed pool of AI-provider API keys with failover, cooldowns,
+  health checks and an admin screen. Consumed by ReplyMate, SpeakEasy and
+  docify via `git:`.
+- **App directory:** `.` — the package root is the repository root.
+- **Branch:** `master` is the default branch and the one every app pins.
+  `main` exists and is **stale**: it carries three commits that never reached
+  `master` (`63c1f12`, `3fa9fb6`, `858c6ca` — an admin-screen UX rewrite).
+  Do not resurrect it or merge it without Keshab saying so; it predates the
+  v1.2 provider-defaults work and merging it would revert it.
+- **Extra project rules:**
+  - A library, not an app: keep `pubspec.lock` out of git (a committed lock
+    pins the *package's* dev graph and turns host-app resolution conflicts into
+    phantom package bugs).
+  - Nothing here may assume it owns the host's Hive, Firebase or Material
+    setup. `KeyCache` opens its own box; `initialize()` must work when the
+    host forgot to call `KeyCache.init()`.
+  - `KeyPoolSelector` and the model helpers stay Firebase-free — they are the
+    only part CI can test on a plain JVM, and `test/` must keep covering them.
+  - Secrets: `admin_api_keys` documents hold live API keys. Never log one,
+    never put one in a test fixture, and never copy this repo's test output
+    into an issue.
+  - The client-readable key pool is a known, documented trade-off (see the
+    README's "Read this before shipping"). Do not expand it — no new client
+    reads of the key documents — and treat a server-side proxy as the intended
+    direction.
+- **Extra verification:** CI cannot see Firestore or a real provider. A change
+  to selection, cooldown or health-check behaviour needs one manual run against
+  a real project: add two keys, kill one, confirm failover and that the dead
+  key stays off after an app restart.
