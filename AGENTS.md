@@ -283,6 +283,13 @@ down here is never touched).
     README's "Read this before shipping"). Do not expand it — no new client
     reads of the key documents — and treat a server-side proxy as the intended
     direction.
+  - Read-failure copy lives in `services/key_pool_errors.dart`, not in a
+    screen. `classifyKeyPoolError` takes an `Object?` and no Firestore type on
+    purpose: it must stay testable on a plain JVM, and every screen must tell
+    `permission-denied` (allowlist the uid) apart from `unavailable` (network).
+    A generic "Could not read the key pool" for both is the bug that shipped
+    once. Adding a new failure means one enum value, one `describeKeyPoolFailure`
+    branch, and one test.
 - **Extra verification:** CI cannot see Firestore or a real provider. A change
   to selection, cooldown or health-check behaviour needs one manual run against
   a real project: add two keys, kill one, confirm failover and that the dead

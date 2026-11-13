@@ -12,6 +12,7 @@ export 'services/api_key_manager.dart';
 export 'services/key_cache.dart';
 export 'services/key_pool_selector.dart';
 export 'services/key_health_checker.dart';
+export 'services/key_pool_errors.dart';
 export 'screens/admin_api_keys_screen.dart';
 export 'screens/admin_key_groups_screen.dart';
 export 'screens/admin_error_logs_screen.dart';

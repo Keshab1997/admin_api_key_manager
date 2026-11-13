@@ -4,6 +4,7 @@ import 'package:admin_api_key_manager/screens/admin_bulk.dart';
 import 'package:admin_api_key_manager/screens/admin_error_logs_screen.dart';
 import 'package:admin_api_key_manager/screens/admin_key_groups_screen.dart';
 import 'package:admin_api_key_manager/services/key_health_checker.dart';
+import 'package:admin_api_key_manager/services/key_pool_errors.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -1274,36 +1275,56 @@ class _ErrorState extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final palette = KeyAdminPalette.of(context);
+    // The four failures have four different fixes. Rendering them all as
+    // "Could not read the key pool" plus raw Firestore text meant an admin
+    // whose account simply was not allowlisted was sent to check the network.
+    final failure = classifyKeyPoolError(error);
+    final copy = describeKeyPoolFailure(failure);
+    final icon = switch (failure) {
+      KeyPoolFailure.permissionDenied => Icons.lock_outline,
+      KeyPoolFailure.notConfigured => Icons.settings_suggest_outlined,
+      KeyPoolFailure.unreachable => Icons.cloud_off_outlined,
+      KeyPoolFailure.unknown => Icons.error_outline,
+    };
+    final tint = switch (failure) {
+      KeyPoolFailure.permissionDenied => palette.attention,
+      KeyPoolFailure.notConfigured => palette.attention,
+      KeyPoolFailure.unreachable => palette.danger,
+      KeyPoolFailure.unknown => palette.danger,
+    };
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.cloud_off_outlined, size: 40, color: palette.danger),
+            Icon(icon, size: 40, color: tint),
             const SizedBox(height: 12),
             Text(
-              'Could not read the key pool.',
+              copy.title,
               textAlign: TextAlign.center,
               style: theme.textTheme.titleSmall,
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(
-              '$error',
-              textAlign: TextAlign.center,
-              maxLines: 4,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'A missing permission reads the same as an empty list here — '
-              'check the Firestore rules for admin read access.',
+              copy.detail,
               textAlign: TextAlign.center,
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
+            // Only for a genuinely unexplained error: the other three already
+            // said what to do, and a raw provider string under them is noise.
+            if (failure == KeyPoolFailure.unknown) ...[
+              const SizedBox(height: 10),
+              Text(
+                '$error',
+                textAlign: TextAlign.center,
+                maxLines: 4,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
+            ],
           ],
         ),
       ),
