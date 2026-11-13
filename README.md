@@ -27,8 +27,12 @@ Flutter project without copy-pasting.
   exhausted (you wire your own push notification).
 - 📊 **Usage & error stats** — written back to Firestore so the admin panel
   shows live numbers.
-- 🖥️ **Minimal admin screen** — list, add, edit, delete, toggle, and
-  "test connection" out of the box.
+- 🖥️ **Admin screen** — key cards with a health label (healthy / cooling down /
+  has errors / disabled), usage and error counts, per-filter view, masked keys
+  with reveal-per-row, and add/edit/test/delete. Styled entirely from the host
+  app's `ColorScheme`; the three state colours come from a `KeyAdminPalette`
+  `ThemeExtension` you can replace. A static preview lives in
+  [`design/admin_screen_preview.html`](design/admin_screen_preview.html).
 - 🔗 **Provider-aware form** — picking a provider fills in its base URL and
   model. A URL you typed yourself is never overwritten; you get an explicit
   "use default" button instead.
@@ -163,6 +167,31 @@ Navigator.of(context).push(
   MaterialPageRoute(builder: (_) => const AdminApiKeysScreen()),
 );
 ```
+
+### Theming it
+
+The screen reads every colour from `ColorScheme`, so it inherits the app's
+theme. The three *state* colours are the one exception, and they are a
+`ThemeExtension` — register your own and the defaults disappear:
+
+```dart
+MaterialApp(
+  theme: ThemeData(
+    colorSchemeSeed: const Color(0xFF1B6EF3),
+    extensions: const <ThemeExtension<dynamic>>[
+      KeyAdminPalette(
+        healthy: Color(0xFF43E0A0),
+        attention: Color(0xFFFFB545),
+        danger: Color(0xFFFF5D6C),
+      ),
+    ],
+  ),
+  // ...
+);
+```
+
+Register nothing and `KeyAdminPalette.fallback` is used, so the screen never
+depends on the host having heard of this package.
 
 ---
 

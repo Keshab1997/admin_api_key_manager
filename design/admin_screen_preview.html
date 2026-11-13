@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin API Keys — redesign preview</title>
+<style>
+  :root{
+    --primary:#1B6EF3; --primary-container:#D9E6FF; --on-primary:#fff;
+    --surface:#FAFCFF; --surface-low:#F4F7FE; --surface-container-highest:#E6ECF7;
+    --on-surface:#0B1425; --on-surface-variant:#5A6478; --outline-variant:#C9D3E6;
+    --healthy:#18A06A; --attention:#D98300; --danger:#D64550;
+    --tertiary:#7A5AF8; --secondary:#2E9BA8;
+    --radius:18px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --primary:#4A94FF; --primary-container:#1B2C4A; --on-primary:#06101F;
+      --surface:#070B14; --surface-low:#0C1220; --surface-container-highest:#17203380;
+      --on-surface:#EAF0FB; --on-surface-variant:#9AA6BE; --outline-variant:#26314A;
+      --healthy:#43E0A0; --attention:#FFB545; --danger:#FF5D6C;
+      --tertiary:#A78BFA; --secondary:#38D9F8;
+    }
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; padding:28px 16px 64px;
+    font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:var(--surface); color:var(--on-surface);
+    display:flex; flex-direction:column; align-items:center; gap:28px;
+  }
+  .wrap{width:100%; max-width:420px}
+  .caption{
+    font-size:12px; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--on-surface-variant); margin:0 0 10px 4px; font-weight:600;
+  }
+  .appbar{display:flex; align-items:center; justify-content:space-between; padding:14px 4px 10px}
+  .appbar h1{font-size:22px; margin:0; font-weight:700; letter-spacing:-.01em}
+  .stats{display:flex; gap:8px; margin-bottom:12px}
+  .stat{
+    flex:1; background:var(--surface-container-highest); border-radius:14px; padding:10px 12px;
+  }
+  .stat b{display:block; font-size:20px; font-weight:700; line-height:1.2}
+  .stat span{font-size:11px; color:var(--on-surface-variant); white-space:nowrap}
+  .seg{
+    display:flex; gap:4px; background:var(--surface-low); border:1px solid var(--outline-variant);
+    border-radius:999px; padding:4px; margin-bottom:14px;
+  }
+  .seg div{
+    flex:1; text-align:center; font-size:13px; font-weight:600; padding:7px 0;
+    border-radius:999px; color:var(--on-surface-variant);
+  }
+  .seg .on{background:var(--primary-container); color:var(--primary)}
+  .card{
+    background:var(--surface-low); border:1px solid var(--outline-variant);
+    border-radius:var(--radius); padding:14px 12px 8px 16px; margin-bottom:10px;
+  }
+  .card.muted{opacity:.62}
+  .head{display:flex; align-items:flex-start; gap:12px}
+  .avatar{
+    width:40px;height:40px;border-radius:12px;display:grid;place-items:center;
+    font-size:18px; flex:none;
+  }
+  .bg-google{background:#1B6EF31f; color:var(--primary)}
+  .bg-or{background:#7A5AF81f; color:var(--tertiary)}
+  .bg-custom{background:#2E9BA81f; color:var(--secondary)}
+  .title{font-size:15.5px; font-weight:600; line-height:1.25}
+  .sub{font-size:12px; color:var(--on-surface-variant); margin-top:2px}
+  .sw{
+    width:42px;height:24px;border-radius:999px;background:var(--outline-variant);
+    position:relative;flex:none;margin-top:2px;
+  }
+  .sw i{position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 2px #0003}
+  .sw.on{background:var(--primary)}
+  .sw.on i{left:20px}
+  .pills{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+  .pill{font-size:11px;font-weight:600;padding:3px 8px;border-radius:8px;letter-spacing:.01em}
+  .p-healthy{background:#18A06A1f;color:var(--healthy)}
+  .p-attention{background:#D983001f;color:var(--attention)}
+  .p-danger{background:#D645501f;color:var(--danger)}
+  .p-neutral{background:var(--surface-container-highest);color:var(--on-surface-variant)}
+  .keyrow{display:flex;align-items:center;gap:8px;margin-top:8px}
+  .key{
+    flex:1; font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:13px;
+    color:var(--on-surface-variant); letter-spacing:1.5px; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap;
+  }
+  .eye{font-size:16px;color:var(--on-surface-variant);padding:2px 4px}
+  hr{border:0;border-top:1px solid var(--outline-variant);margin:8px 0 0}
+  .actions{display:flex;align-items:center;justify-content:flex-end;gap:6px;padding:4px 0}
+  .act{font-size:13px;font-weight:600;color:var(--primary);padding:6px 8px;border-radius:8px}
+  .ico{font-size:16px;color:var(--on-surface-variant);padding:6px}
+  .ico.del{color:var(--danger)}
+  .fab{
+    margin-top:6px;background:var(--primary);color:var(--on-primary);
+    border-radius:16px;padding:14px 20px;font-weight:700;font-size:14px;
+    display:flex;align-items:center;gap:10px;justify-content:center;
+    box-shadow:0 6px 18px #1B6EF344;
+  }
+  .sheet{
+    background:var(--surface-low); border:1px solid var(--outline-variant);
+    border-radius:24px; padding:8px 20px 20px;
+  }
+  .grab{width:34px;height:4px;border-radius:99px;background:var(--outline-variant);margin:6px auto 16px}
+  .sheet h2{font-size:19px;margin:0 0 4px;font-weight:700}
+  .sheet p.lead{font-size:12px;color:var(--on-surface-variant);margin:0 0 16px}
+  .field{margin-bottom:12px}
+  .field label{display:block;font-size:11.5px;color:var(--on-surface-variant);margin-bottom:5px;font-weight:600}
+  .box{
+    border:1px solid var(--outline-variant); border-radius:10px; padding:11px 12px;
+    font-size:13.5px; background:var(--surface);
+  }
+  .box .ph{color:var(--on-surface-variant);opacity:.75}
+  .help{font-size:11px;color:var(--on-surface-variant);margin-top:5px}
+  .dropdown{display:flex;justify-content:space-between;align-items:center}
+  .btn{
+    background:var(--primary);color:var(--on-primary);text-align:center;
+    padding:14px;border-radius:14px;font-weight:700;font-size:14px;margin-top:8px;
+  }
+  .legend{font-size:12px;color:var(--on-surface-variant);line-height:1.6;max-width:420px}
+  .legend b{color:var(--on-surface)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <p class="caption">Key list · light / dark follows system</p>
+  <div class="appbar"><h1>API keys</h1></div>
+
+  <div class="stats">
+    <div class="stat"><b style="color:var(--healthy)">2</b><span>active</span></div>
+    <div class="stat"><b style="color:var(--attention)">1</b><span>need attention</span></div>
+    <div class="stat"><b>3</b><span>total</span></div>
+  </div>
+
+  <div class="seg"><div class="on">All</div><div>Enabled</div><div>Problems</div></div>
+
+  <div class="card">
+    <div class="head">
+      <div class="avatar bg-or">⇄</div>
+      <div style="flex:1">
+        <div class="title">Primary OpenRouter</div>
+        <div class="sub">OpenRouter · openai/gpt-4o-mini</div>
+      </div>
+      <div class="sw on"><i></i></div>
+    </div>
+    <div class="pills">
+      <span class="pill p-healthy">Healthy</span>
+      <span class="pill p-neutral">P1</span>
+      <span class="pill p-neutral">1,204 uses</span>
+    </div>
+    <div class="keyrow">
+      <span class="key">sk-o••••••••••••</span>
+      <span class="eye">👁</span>
+    </div>
+    <hr>
+    <div class="actions">
+      <span class="act">⚡ Test</span><span class="ico">✎</span><span class="ico del">🗑</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="head">
+      <div class="avatar bg-google">✦</div>
+      <div style="flex:1">
+        <div class="title">Gemini fallback</div>
+        <div class="sub">Google AI Studio · gemini-2.0-flash</div>
+      </div>
+      <div class="sw on"><i></i></div>
+    </div>
+    <div class="pills">
+      <span class="pill p-attention">Cooling down</span>
+      <span class="pill p-neutral">P2</span>
+      <span class="pill p-danger">3 errors</span>
+    </div>
+    <div class="keyrow">
+      <span class="key">AIza••••••••••••</span>
+      <span class="eye">👁</span>
+    </div>
+    <hr>
+    <div class="actions">
+      <span class="act">⚡ Test</span><span class="ico">✎</span><span class="ico del">🗑</span>
+    </div>
+  </div>
+
+  <div class="card muted">
+    <div class="head">
+      <div class="avatar bg-custom">⌗</div>
+      <div style="flex:1">
+        <div class="title">Own proxy</div>
+        <div class="sub">Custom · my-finetune-v3</div>
+      </div>
+      <div class="sw"><i></i></div>
+    </div>
+    <div class="pills">
+      <span class="pill p-neutral">Disabled</span>
+      <span class="pill p-neutral">P3</span>
+    </div>
+    <div class="keyrow">
+      <span class="key">••••••••••••</span>
+      <span class="eye">👁</span>
+    </div>
+    <hr>
+    <div class="actions">
+      <span class="act">⚡ Test</span><span class="ico">✎</span><span class="ico del">🗑</span>
+    </div>
+  </div>
+
+  <div class="fab">＋ Add key</div>
+</div>
+
+<div class="wrap">
+  <p class="caption">Add / edit form (bottom sheet)</p>
+  <div class="sheet">
+    <div class="grab"></div>
+    <h2>Add API key</h2>
+    <p class="lead">These are stored in Firestore and read by every device. Use a key you can rotate.</p>
+
+    <div class="field"><label>Name</label><div class="box"><span class="ph">Primary OpenRouter</span></div></div>
+    <div class="field">
+      <label>API key</label>
+      <div class="box" style="letter-spacing:2px">••••••••••••</div>
+      <div class="help">Hidden while typing. Test it before saving.</div>
+    </div>
+    <div class="field"><label>Provider</label><div class="box dropdown">OpenRouter <span>▾</span></div></div>
+    <div class="field"><label>Base URL</label><div class="box">https://openrouter.ai/api/v1</div></div>
+    <div class="field"><label>Model</label><div class="box">openai/gpt-4o-mini</div></div>
+    <div class="field">
+      <label>Priority</label><div class="box">1</div>
+      <div class="help">Lower is tried first.</div>
+    </div>
+    <div class="btn">Add key</div>
+  </div>
+</div>
+
+<p class="legend">
+  <b>What changed, and why it is safe for the host app:</b><br>
+  every colour is a <code>ColorScheme</code> role, so the screen follows whatever theme the app installs —
+  a host seeded on brand blue gets brand blue.<br>
+  The three <b>state</b> colours are a <code>ThemeExtension</code> (<code>KeyAdminPalette</code>):
+  a host that already owns a palette registers its own, and a host that registers nothing
+  gets the defaults above. State is always a <b>label + colour</b>, never colour alone.<br>
+  Keys are masked, reveal is per-row and off by default, and the add-form input is obscured —
+  the old screen showed the full secret in plain text in the list.
+</p>
+
+</body>
+</html>

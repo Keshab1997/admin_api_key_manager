@@ -1,8 +1,8 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:material_ui/material_ui.dart';
 import 'package:admin_api_key_manager/models/admin_api_key.dart';
 import 'package:admin_api_key_manager/services/api_key_manager.dart';
 import 'package:admin_api_key_manager/services/key_health_checker.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Minimal, self-contained admin screen for managing the Firestore-backed
 /// API key pool. Drop it behind your own admin gate:
@@ -15,6 +15,15 @@ import 'package:admin_api_key_manager/services/key_health_checker.dart';
 ///
 /// Requires the same Firestore rules as `ApiKeyManager` (admin write access to
 /// the `admin_api_keys` collection).
+///
+/// Visual language, in one place so a host app can override it:
+/// - every colour comes from `ColorScheme`, never a hard-coded hue, so the
+///   screen follows whichever theme (and seed colour) the app installs;
+/// - [KeyAdminPalette] is the one exception — a `ThemeExtension` carrying the
+///   three *state* colours (healthy / attention / danger). Hosts that already
+///   own a palette can register their own instance instead of this default;
+/// - the state of a key is shown as a label + colour, never as colour alone:
+///   docs redacted at a glance, and colour never carries meaning by itself.
 class AdminApiKeysScreen extends StatefulWidget {
   /// Collection name override — must match [ApiKeyManager.keysCollection].
   final String collection;
@@ -24,6 +33,65 @@ class AdminApiKeysScreen extends StatefulWidget {
   @override
   State<AdminApiKeysScreen> createState() => _AdminApiKeysScreenState();
 }
+
+/// State colours for the key list, as a `ThemeExtension` so the screen inherits
+/// the host theme and a host can supply its own without forking the widget.
+@immutable
+class KeyAdminPalette extends ThemeExtension<KeyAdminPalette> {
+  const KeyAdminPalette({
+    required this.healthy,
+    required this.attention,
+    required this.danger,
+  });
+
+  final Color healthy;
+  final Color attention;
+  final Color danger;
+
+  /// Deliberately readable on light and dark surfaces; a host app with its own
+  /// brand states should add `KeyAdminPalette(...)` to `ThemeData.extensions`.
+  static const KeyAdminPalette fallback = KeyAdminPalette(
+    healthy: Color(0xFF18A06A),
+    attention: Color(0xFFD98300),
+    danger: Color(0xFFD64550),
+  );
+
+  static KeyAdminPalette of(BuildContext context) =>
+      Theme.of(context).extension<KeyAdminPalette>() ?? fallback;
+
+  @override
+  KeyAdminPalette copyWith({Color? healthy, Color? attention, Color? danger}) {
+    return KeyAdminPalette(
+      healthy: healthy ?? this.healthy,
+      attention: attention ?? this.attention,
+      danger: danger ?? this.danger,
+    );
+  }
+
+  @override
+  KeyAdminPalette lerp(ThemeExtension<KeyAdminPalette>? other, double t) {
+    if (other is! KeyAdminPalette) return this;
+    return KeyAdminPalette(
+      healthy: Color.lerp(healthy, other.healthy, t)!,
+      attention: Color.lerp(attention, other.attention, t)!,
+      danger: Color.lerp(danger, other.danger, t)!,
+    );
+  }
+}
+
+/// The read-only form of a key that the list needs: the live key plus the
+/// manager's device-local view (cooldown) merged in.
+class _Row {
+  const _Row({required this.key, required this.onCooldownUntil});
+
+  final AdminApiKey key;
+  final DateTime? onCooldownUntil;
+
+  bool get isOnCooldown =>
+      onCooldownUntil != null && onCooldownUntil!.isAfter(DateTime.now());
+}
+
+enum _Filter { all, active, trouble }
 
 class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
   final _nameCtrl = TextEditingController();
@@ -38,6 +106,12 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
       text: AdminApiKey.providerDefaults[_initialProvider]!.model);
   String _provider = _initialProvider;
   int _priority = 1;
+
+  /// Revealed key ids. Empty by default: a captured screenshot or a shoulder
+  /// behind you should not show a provider secret.
+  final Set<String> _revealed = {};
+
+  _Filter _filter = _Filter.all;
 
   @override
   void dispose() {
@@ -58,11 +132,21 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
       _toast('Name and key are required');
       return;
     }
+
+    final baseUrl = _baseUrlCtrl.text.trim();
+    final model = _modelCtrl.text.trim();
+    final problem =
+        _validate(provider: _provider, baseUrl: baseUrl, model: model);
+    if (problem != null) {
+      _toast(problem);
+      return;
+    }
+
     final data = {
       'name': name,
       'key': key,
-      'baseUrl': _baseUrlCtrl.text.trim(),
-      'model': _modelCtrl.text.trim(),
+      'baseUrl': baseUrl,
+      'model': model,
       'provider': _provider,
       'isActive': true,
       'priority': _priority,
@@ -87,6 +171,31 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
     } catch (e) {
       _toast('Save failed: $e');
     }
+  }
+
+  /// Catches the two mistakes that otherwise only surface as a 404 from the
+  /// provider later: a missing API version on Gemini, and a bare model name on
+  /// OpenRouter (it addresses models as `provider/model`).
+  String? _validate({
+    required String provider,
+    required String baseUrl,
+    required String model,
+  }) {
+    if (baseUrl.isEmpty) return 'Base URL is required';
+    if (model.isEmpty) return 'Model is required';
+    if (!baseUrl.startsWith('https://')) {
+      return 'Base URL must start with https://';
+    }
+    if (provider == 'google' && !RegExp(r'/v\d').hasMatch(baseUrl)) {
+      return 'Google needs the API version in the URL, e.g. …/v1beta';
+    }
+    if (baseUrl.contains('openrouter') && !model.contains('/')) {
+      final fixed = resolveOpenRouterModel(baseUrl, model);
+      return fixed == model
+          ? 'OpenRouter needs a provider/model id, e.g. openai/gpt-4o-mini'
+          : 'OpenRouter needs a provider/model id — did you mean "$fixed"?';
+    }
+    return null;
   }
 
   Future<void> _deleteKey(AdminApiKey k) async {
@@ -131,14 +240,19 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
       model: k.model,
     );
     if (!mounted) return;
-    final ok = status == 200;
+    final detail = switch (status) {
+      200 => 'Connected successfully (HTTP 200).',
+      401 || 403 => 'The provider rejected this key (HTTP $status). It may be '
+          'revoked or from another project.',
+      429 => 'Rate limited (HTTP 429). The key works but is over its quota.',
+      0 => 'Could not reach the provider: network, timeout or bad URL.',
+      _ => 'Failed with HTTP $status.',
+    };
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
         title: Text('Test: ${k.name}'),
-        content: Text(ok
-            ? 'Connected successfully (HTTP 200).'
-            : 'Failed with HTTP $status.'),
+        content: Text(detail),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context), child: const Text('OK')),
@@ -171,42 +285,72 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      // StatefulBuilder, not the screen's setState: the sheet is built once by
-      // its own route, so calling setState on the parent leaves this subtree
-      // untouched and the provider hint would never appear.
+      showDragHandle: true,
       builder: (sheetContext) => StatefulBuilder(
         builder: (context, setSheetState) {
+          final theme = Theme.of(context);
           final defaults = AdminApiKey.defaultsFor(_provider);
           final urlIsCustom =
               defaults != null && _baseUrlCtrl.text.trim() != defaults.baseUrl;
 
           return Padding(
             padding: EdgeInsets.only(
-              bottom: MediaQuery.of(context).viewInsets.bottom,
-              left: 16,
-              right: 16,
-              top: 16,
+              bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+              left: 20,
+              right: 20,
+              top: 4,
             ),
             child: SingleChildScrollView(
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(existing != null ? 'Edit API Key' : 'Add API Key',
-                      style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: 12),
+                  Text(existing != null ? 'Edit API key' : 'Add API key',
+                      style: theme.textTheme.titleLarge
+                          ?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 4),
+                  Text(
+                    _provider == 'custom'
+                        ? 'Any endpoint that speaks /chat/completions.'
+                        : 'These are stored in Firestore and read by every '
+                            'device. Use a key you can rotate.',
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 16),
+
                   TextField(
                     controller: _nameCtrl,
-                    decoration: const InputDecoration(labelText: 'Name'),
+                    textCapitalization: TextCapitalization.words,
+                    decoration: const InputDecoration(
+                      labelText: 'Name',
+                      hintText: 'Primary OpenRouter',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
+                  const SizedBox(height: 12),
                   TextField(
                     controller: _keyCtrl,
-                    decoration: const InputDecoration(labelText: 'API Key'),
+                    obscureText: true,
+                    enableSuggestions: false,
+                    autocorrect: false,
+                    decoration: const InputDecoration(
+                      labelText: 'API key',
+                      hintText: 'sk-or-…',
+                      border: OutlineInputBorder(),
+                      helperText: 'Hidden while typing. Test it before saving.',
+                    ),
                   ),
+                  const SizedBox(height: 12),
 
                   // Provider first: it decides what the two fields below
                   // should contain, so choosing it afterwards reads backwards.
                   DropdownButtonFormField<String>(
                     initialValue: _provider,
+                    decoration: const InputDecoration(
+                      labelText: 'Provider',
+                      border: OutlineInputBorder(),
+                    ),
                     items: const [
                       DropdownMenuItem(
                           value: 'openrouter', child: Text('OpenRouter')),
@@ -216,7 +360,6 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
                           value: 'custom',
                           child: Text('Custom (OpenAI-compatible)')),
                     ],
-                    decoration: const InputDecoration(labelText: 'Provider'),
                     onChanged: (v) {
                       final provider = v ?? 'custom';
                       final changed = _applyProviderDefaults(provider);
@@ -228,13 +371,15 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
                       }
                     },
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 12),
 
                   TextField(
                     controller: _baseUrlCtrl,
                     onChanged: (_) => setSheetState(() {}),
+                    keyboardType: TextInputType.url,
                     decoration: InputDecoration(
                       labelText: 'Base URL',
+                      border: const OutlineInputBorder(),
                       helperText: _provider == 'google'
                           ? 'Include the API version, e.g. …/v1beta'
                           : _provider == 'custom'
@@ -255,28 +400,40 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
                           : null,
                     ),
                   ),
+                  const SizedBox(height: 12),
                   TextField(
                     controller: _modelCtrl,
                     onChanged: (_) => setSheetState(() {}),
-                    decoration: const InputDecoration(labelText: 'Model'),
+                    decoration: const InputDecoration(
+                      labelText: 'Model',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
+                  const SizedBox(height: 12),
 
                   TextFormField(
                     initialValue: _priority.toString(),
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
-                        labelText: 'Priority (lower = tried first)'),
+                      labelText: 'Priority',
+                      helperText: 'Lower is tried first.',
+                      border: OutlineInputBorder(),
+                    ),
                     onChanged: (v) => _priority = int.tryParse(v) ?? 1,
                   ),
-                  const SizedBox(height: 12),
-                  ElevatedButton(
+                  const SizedBox(height: 20),
+                  FilledButton(
                     onPressed: () {
                       Navigator.pop(sheetContext);
                       _saveKey(existing);
                     },
-                    child: Text(existing != null ? 'Save changes' : 'Add key'),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child:
+                          Text(existing != null ? 'Save changes' : 'Add key'),
+                    ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 8),
                 ],
               ),
             ),
@@ -328,58 +485,525 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
   void _toast(String m) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 
+  // ── Rendering ──
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('API Keys')),
-      floatingActionButton: FloatingActionButton(
+      appBar: AppBar(
+        title: const Text('API keys'),
+        centerTitle: false,
+        titleTextStyle:
+            theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: _showAddForm,
-        child: const Icon(Icons.add),
+        icon: const Icon(Icons.add),
+        label: const Text('Add key'),
       ),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: _col.orderBy('priority').snapshots(),
         builder: (context, snap) {
           if (snap.hasError) {
-            return Center(child: Text('Error: ${snap.error}'));
+            return _ErrorState(error: snap.error);
           }
           if (!snap.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
-          final docs = snap.data!.docs;
-          if (docs.isEmpty) {
-            return const Center(child: Text('No keys yet. Tap + to add one.'));
-          }
-          return ListView.builder(
-            itemCount: docs.length,
-            itemBuilder: (context, i) {
-              final k = AdminApiKey.fromMap(docs[i].data(), docs[i].id);
-              return ListTile(
-                title: Text(k.name),
-                subtitle:
-                    Text('${k.provider} • ${k.model} • pri ${k.priority}'),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                        icon: const Icon(Icons.cable),
-                        tooltip: 'Test connection',
-                        onPressed: () => _testConnection(k)),
-                    IconButton(
-                        icon: const Icon(Icons.edit),
-                        onPressed: () => _edit(k)),
-                    IconButton(
-                        icon: const Icon(Icons.delete),
-                        onPressed: () => _deleteKey(k)),
-                    Switch(
-                      value: k.isActive,
-                      onChanged: (v) => _toggleActive(k, v),
-                    ),
-                  ],
+          final rows = snap.data!.docs
+              .map((doc) => AdminApiKey.fromMap(doc.data(), doc.id))
+              .map((key) => _Row(
+                    key: key,
+                    onCooldownUntil: _cooldownUntil(key.id),
+                  ))
+              .toList();
+
+          final visible = _applyFilter(rows);
+          final broken = rows.where((r) => r.key.errorCount > 0).length;
+
+          return CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: _Summary(
+                  total: rows.length,
+                  active: rows.where((r) => r.key.isActive).length,
+                  trouble: broken,
+                  filter: _filter,
+                  onFilter: (f) => setState(() => _filter = f),
                 ),
-              );
-            },
+              ),
+              if (visible.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: _EmptyState(
+                    filtered: rows.isNotEmpty,
+                    onClearFilter: () => setState(() => _filter = _Filter.all),
+                  ),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
+                  sliver: SliverList.separated(
+                    itemCount: visible.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (context, i) => _KeyCard(
+                      row: visible[i],
+                      revealed: _revealed.contains(visible[i].key.id),
+                      onReveal: () => setState(() {
+                        final id = visible[i].key.id;
+                        _revealed.contains(id)
+                            ? _revealed.remove(id)
+                            : _revealed.add(id);
+                      }),
+                      onTest: () => _testConnection(visible[i].key),
+                      onEdit: () => _edit(visible[i].key),
+                      onDelete: () => _deleteKey(visible[i].key),
+                      onToggle: (v) => _toggleActive(visible[i].key, v),
+                    ),
+                  ),
+                ),
+            ],
           );
         },
+      ),
+    );
+  }
+
+  /// Cooldown, if the manager knows about one for this key. Read-only: the
+  /// manager stays the owner of that state.
+  DateTime? _cooldownUntil(String keyId) {
+    for (final entry in ApiKeyManager.instance.getKeyHealth()) {
+      if (entry['id'] == keyId && entry['isOnCooldown'] == true) {
+        return DateTime.now();
+      }
+    }
+    return null;
+  }
+
+  List<_Row> _applyFilter(List<_Row> rows) {
+    switch (_filter) {
+      case _Filter.all:
+        return rows;
+      case _Filter.active:
+        return rows.where((r) => r.key.isActive).toList();
+      case _Filter.trouble:
+        return rows
+            .where((r) =>
+                r.key.errorCount > 0 || !r.key.isActive || r.isOnCooldown)
+            .toList();
+    }
+  }
+}
+
+// ── Pieces ──
+
+class _Summary extends StatelessWidget {
+  const _Summary({
+    required this.total,
+    required this.active,
+    required this.trouble,
+    required this.filter,
+    required this.onFilter,
+  });
+
+  final int total;
+  final int active;
+  final int trouble;
+  final _Filter filter;
+  final ValueChanged<_Filter> onFilter;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final palette = KeyAdminPalette.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              _Stat(value: '$active', label: 'active', tone: palette.healthy),
+              const SizedBox(width: 8),
+              _Stat(
+                value: '$trouble',
+                label: trouble == 0 ? 'no errors' : 'need attention',
+                tone: trouble == 0
+                    ? theme.colorScheme.onSurfaceVariant
+                    : palette.attention,
+              ),
+              const SizedBox(width: 8),
+              _Stat(
+                value: '$total',
+                label: 'total',
+                tone: theme.colorScheme.onSurfaceVariant,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SegmentedButton<_Filter>(
+            segments: const [
+              ButtonSegment(value: _Filter.all, label: Text('All')),
+              ButtonSegment(value: _Filter.active, label: Text('Enabled')),
+              ButtonSegment(value: _Filter.trouble, label: Text('Problems')),
+            ],
+            selected: {filter},
+            showSelectedIcon: false,
+            onSelectionChanged: (s) => onFilter(s.first),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Stat extends StatelessWidget {
+  const _Stat({required this.value, required this.label, required this.tone});
+
+  final String value;
+  final String label;
+  final Color tone;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+        decoration: BoxDecoration(
+          color:
+              theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(value,
+                style: theme.textTheme.titleLarge
+                    ?.copyWith(color: tone, fontWeight: FontWeight.w700)),
+            Text(label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelSmall
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _KeyCard extends StatelessWidget {
+  const _KeyCard({
+    required this.row,
+    required this.revealed,
+    required this.onReveal,
+    required this.onTest,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onToggle,
+  });
+
+  final _Row row;
+  final bool revealed;
+  final VoidCallback onReveal;
+  final VoidCallback onTest;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final ValueChanged<bool> onToggle;
+
+  /// Masked always-short form: never leaks length, which alone hints at the
+  /// provider.
+  String get _masked => '••••••••••••';
+
+  String get _shown {
+    final key = row.key.key;
+    if (revealed) return key;
+    if (key.length <= 8) return _masked;
+    // Prefix only: enough to tell two keys apart, useless as a credential.
+    return '${key.substring(0, 4)}$_masked';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final palette = KeyAdminPalette.of(context);
+    final k = row.key;
+
+    final (Color tone, String state) = !k.isActive
+        ? (theme.colorScheme.onSurfaceVariant, 'Disabled')
+        : row.isOnCooldown
+            ? (palette.attention, 'Cooling down')
+            : k.errorCount > 0
+                ? (palette.danger, 'Has errors')
+                : (palette.healthy, 'Healthy');
+
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: theme.colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 8, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _ProviderAvatar(provider: k.provider),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        k.name.isEmpty ? 'Untitled key' : k.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${AdminApiKey.providerName(k.provider)} · ${k.model}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Switch(
+                  value: k.isActive,
+                  onChanged: onToggle,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                _Pill(label: state, tone: tone),
+                const SizedBox(width: 6),
+                _Pill(
+                  label: 'P${k.priority}',
+                  tone: theme.colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 6),
+                if (k.usageCount > 0)
+                  _Pill(
+                    label: '${k.usageCount} uses',
+                    tone: theme.colorScheme.onSurfaceVariant,
+                  ),
+                if (k.errorCount > 0) ...[
+                  const SizedBox(width: 6),
+                  _Pill(
+                    label: '${k.errorCount} errors',
+                    tone: palette.danger,
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _shown,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontFamily: 'monospace',
+                      fontFamilyFallback: const ['Roboto Mono', 'Courier'],
+                      color: theme.colorScheme.onSurfaceVariant,
+                      letterSpacing: revealed ? 0 : 1.5,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: revealed ? 'Hide key' : 'Reveal key',
+                  visualDensity: VisualDensity.compact,
+                  icon: Icon(
+                    revealed
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                    size: 20,
+                  ),
+                  onPressed: onReveal,
+                ),
+              ],
+            ),
+            const Divider(height: 1),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton.icon(
+                  onPressed: onTest,
+                  icon: const Icon(Icons.bolt_outlined, size: 18),
+                  label: const Text('Test'),
+                ),
+                IconButton(
+                  tooltip: 'Edit',
+                  icon: const Icon(Icons.edit_outlined),
+                  onPressed: onEdit,
+                ),
+                IconButton(
+                  tooltip: 'Delete',
+                  icon: const Icon(Icons.delete_outline),
+                  color: palette.danger,
+                  onPressed: onDelete,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProviderAvatar extends StatelessWidget {
+  const _ProviderAvatar({required this.provider});
+
+  final String provider;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final (IconData icon, Color tone) = switch (provider) {
+      'google' => (Icons.auto_awesome_outlined, theme.colorScheme.primary),
+      'openrouter' => (Icons.alt_route_outlined, theme.colorScheme.tertiary),
+      _ => (Icons.lan_outlined, theme.colorScheme.secondary),
+    };
+
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: tone.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Icon(icon, size: 20, color: tone),
+    );
+  }
+}
+
+class _Pill extends StatelessWidget {
+  const _Pill({required this.label, required this.tone});
+
+  final String label;
+  final Color tone;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: tone.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context)
+            .textTheme
+            .labelSmall
+            ?.copyWith(color: tone, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState({required this.filtered, required this.onClearFilter});
+
+  final bool filtered;
+  final VoidCallback onClearFilter;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              filtered ? Icons.filter_alt_off_outlined : Icons.key_outlined,
+              size: 40,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              filtered
+                  ? 'No keys match this filter.'
+                  : 'No keys yet. Tap “Add key” to add one.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+            if (filtered) ...[
+              const SizedBox(height: 12),
+              TextButton(
+                  onPressed: onClearFilter, child: const Text('Show all')),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ErrorState extends StatelessWidget {
+  const _ErrorState({required this.error});
+
+  final Object? error;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final palette = KeyAdminPalette.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.cloud_off_outlined, size: 40, color: palette.danger),
+            const SizedBox(height: 12),
+            Text(
+              'Could not read the key pool.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.titleSmall,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '$error',
+              textAlign: TextAlign.center,
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'A missing permission reads the same as an empty list here — '
+              'check the Firestore rules for admin read access.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+          ],
+        ),
       ),
     );
   }
