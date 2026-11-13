@@ -155,7 +155,8 @@ class AdminApiKey {
       'priority': priority,
       'usageCount': usageCount,
       'errorCount': errorCount,
-      'lastErrorAt': lastErrorAt != null ? Timestamp.fromDate(lastErrorAt!) : null,
+      'lastErrorAt':
+          lastErrorAt != null ? Timestamp.fromDate(lastErrorAt!) : null,
       'lastUsedAt': lastUsedAt != null ? Timestamp.fromDate(lastUsedAt!) : null,
       'addedBy': addedBy,
       'createdAt': Timestamp.fromDate(createdAt),

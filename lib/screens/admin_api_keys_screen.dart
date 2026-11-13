@@ -97,9 +97,11 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
         content: Text('Delete "${k.name}"? This cannot be undone.'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
           TextButton(
-              onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete')),
         ],
       ),
     );
@@ -138,7 +140,8 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
             ? 'Connected successfully (HTTP 200).'
             : 'Failed with HTTP $status.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK')),
+          TextButton(
+              onPressed: () => Navigator.pop(context), child: const Text('OK')),
         ],
       ),
     );
@@ -174,8 +177,8 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
       builder: (sheetContext) => StatefulBuilder(
         builder: (context, setSheetState) {
           final defaults = AdminApiKey.defaultsFor(_provider);
-          final urlIsCustom = defaults != null &&
-              _baseUrlCtrl.text.trim() != defaults.baseUrl;
+          final urlIsCustom =
+              defaults != null && _baseUrlCtrl.text.trim() != defaults.baseUrl;
 
           return Padding(
             padding: EdgeInsets.only(
@@ -213,8 +216,7 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
                           value: 'custom',
                           child: Text('Custom (OpenAI-compatible)')),
                     ],
-                    decoration:
-                        const InputDecoration(labelText: 'Provider'),
+                    decoration: const InputDecoration(labelText: 'Provider'),
                     onChanged: (v) {
                       final provider = v ?? 'custom';
                       final changed = _applyProviderDefaults(provider);
@@ -272,8 +274,7 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
                       Navigator.pop(sheetContext);
                       _saveKey(existing);
                     },
-                    child: Text(
-                        existing != null ? 'Save changes' : 'Add key'),
+                    child: Text(existing != null ? 'Save changes' : 'Add key'),
                   ),
                   const SizedBox(height: 16),
                 ],
@@ -324,8 +325,8 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
     return changed;
   }
 
-  void _toast(String m) => ScaffoldMessenger.of(context)
-      .showSnackBar(SnackBar(content: Text(m)));
+  void _toast(String m) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 
   @override
   Widget build(BuildContext context) {
@@ -354,7 +355,8 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
               final k = AdminApiKey.fromMap(docs[i].data(), docs[i].id);
               return ListTile(
                 title: Text(k.name),
-                subtitle: Text('${k.provider} • ${k.model} • pri ${k.priority}'),
+                subtitle:
+                    Text('${k.provider} • ${k.model} • pri ${k.priority}'),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
