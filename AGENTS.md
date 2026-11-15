@@ -3,11 +3,17 @@
 Playbook for AI agents working in this repository. Read it once at the start of
 a session: everything here exists to keep one change loop short.
 
-<!-- flutter-builder:agent-pack:start v1.13.1 -->
+<!-- flutter-builder:agent-pack:start v1.16.0 -->
 ## Rule #1 — CI is manual; preflight is your check
 
 This repository runs CI **only when the human dispatches it** (Actions → *Flutter
 CI* → Run workflow). Nothing runs on a push. So:
+
+> **Name things as the project actually has them.** The workflow names in this
+> file are the pack's defaults; a project may hand-roll its gates instead of
+> copying the examples. Read `.github/workflows/` once per session and quote the
+> real names — dispatching a workflow that does not exist wastes the human's
+> turn, and assuming one covers your change is how a batch ships unchecked.
 
 - Work lands on `main` **directly** — no feature branch, no pull request.
 - Do **not** wait for a run after pushing. Nothing started; waiting only wastes
@@ -38,6 +44,7 @@ python3 tool/agent_loop.py -m "fix(scope): what changed"   # preflight + commit 
 | `python3 tool/preflight.py` | ~1 s | every change, before every push |
 | `flutter test test/<file>_test.dart` (via flutter-bootstrap) | 40 s once per session, then seconds | the Dart change that file covers |
 | `flutter analyze` or the full `flutter test` | ~20 s / 1–3 min | shared surfaces, risky diffs, or when the human asks |
+| `python3 tool/local_screenshots.py --shot <name>` | one `flutter test` run, ~1 s per screen, no CI | every widget change you want to see |
 | `python3 tool/see_screen.py` | one CI run | before and after a UI change |
 | The human's CI run | the human's attention + a runner | once per finished batch — never per edit |
 
@@ -121,7 +128,30 @@ no pull request. Exit codes: `0` committed/pushed, `1` the push failed,
 
 ## Seeing a screen — look, do not guess
 
-You cannot run the app, but you can *see* it. `tool/see_screen.py` asks CI to
+You cannot run the app, but you can *see* it, and the fast way costs nothing on
+GitHub: `tool/local_screenshots.py` renders the screens listed in
+`tool/screenshots/shot_registry.dart` to PNGs with `flutter test`, offline.
+
+```bash
+python3 tool/local_screenshots.py --list               # the shots this project has
+python3 tool/local_screenshots.py --shot home          # one
+python3 tool/local_screenshots.py --shot home,settings # several, one run
+python3 tool/local_screenshots.py                      # all of them
+```
+
+* `shot_registry.dart` is **your** file: it says which screens to photograph and
+  how to dress them (the app's theme, its fonts, its native channel answered as
+  "nothing granted yet", any local store initialised). Add a shot when you add a
+  screen; keep it small and honest. The framework and the runner next to it are
+  the pack's and are replaced when the pack updates — a fix belongs upstream.
+* The pictures land in `.agent-screens/` (git-ignored). They are **evidence, not
+  fixtures**: never read one back as a test input, never commit one, and never
+  let CI pay for rendering.
+* A shot that renders as a red error page is telling you the truth: a missing
+  mock, a missing font, a missing `setUp`. Fix the shot, not the screenshot tool.
+
+When the screen you need is behind a login, a plugin or several taps, or when
+you want the pushed build rather than the test build, `tool/see_screen.py` asks CI to
 build the app for web and photograph the routes you name, waits for the run,
 downloads the images and prints their paths. Then open them — with your image
 tool, not your imagination:
@@ -136,7 +166,8 @@ python3 tool/see_screen.py --route /settings --wait-ms 12000   # slow first fram
   like now. After: see what your change did. A green CI says the code compiles;
   only the picture says the layout is right.
 * This is the one thing that does start a run — it dispatches the UI-screenshots
-  workflow itself, so use it deliberately, not on every edit.
+  workflow itself, so use it deliberately, not on every edit. For a screen you
+  can render in a test, `tool/local_screenshots.py` is faster and free.
 * The routes are the app's own (`/settings`, `/profile`) — the same names the
   app navigates to. A screen behind a login or several taps cannot be reached
   this way; ask the human for a screenshot of that one instead.
@@ -165,21 +196,34 @@ python3 tool/see_screen.py --route /settings --wait-ms 12000   # slow first fram
 
 | Situation | What runs |
 |---|---|
-| Push to `main` (any change) | nothing — CI is manual |
-| Docs-only change (`**.md`, `docs/**`, `distribution/**`) | nothing |
+| Push to a non-Pages branch with app/code/assets/dependency changes | web preview refreshes; CI stays manual |
+| Docs/Markdown/release-note/`.github/`-only push | nothing |
 | You ask the human to run CI | CI once, for the whole batch |
 | `flutter analyze` / `flutter test` (via flutter-bootstrap) | nothing on GitHub — 40 s to install once per session, then seconds to minutes |
+| `local_screenshots.py` | nothing on GitHub — local `flutter test` only |
 | `see_screen.py` | the UI-screenshots workflow, once per call |
+| a workflow with a `paths:` filter that your change misses | **nothing** — see below |
+
+A project's Dart job is often path-filtered (e.g. `paths: lib/features/x/**`)
+so that a small batch does not spend a run. The trap: a change *outside* those
+paths starts **no run at all**, and a green board afterwards means "nothing
+was checked", not "nothing broke". When the diff is even slightly risky and no
+workflow matches it, run the local pair once (`flutter analyze` + the relevant
+`flutter test`) — that is the only check that diff will ever get.
 
 If you want a run right now, do **not** retrigger it with an empty commit — use
 *Actions → Run workflow* (or ask the human to).
 
 ## CI map
 
+The pack's standard set, for a project that copied `examples/project-workflows/`.
+Confirm the list against `.github/workflows/` before quoting it — a project may
+have fewer (or differently named) workflows:
+
 | Workflow | Runs when | What it does |
 |---|---|---|
 | `ci.yml` → shared `flutter-build.yml` | **manual** (`workflow_dispatch`) | `dart format` check → `flutter analyze --fatal-infos` → `flutter test` + coverage |
-| `web-preview.yml` | manual dispatch, branch delete | builds the web app, deploys `preview/<branch>/` to GitHub Pages |
+| `web-preview.yml` | relevant branch push, manual dispatch, branch delete | builds the web app and replaces that branch's `preview/<branch>/` on GitHub Pages |
 | `manual-build.yml` | manual dispatch | APK / AAB artifact |
 | `publish-release.yml` | manual dispatch | signed build → tag → GitHub Release (+ Play internal if configured) |
 | `release.yml` | `v*` tag push | signed AAB artifact for the tag |
@@ -243,7 +287,7 @@ rejects a request that still carries the `Authorization` header
   কিছু বদলালে বা আপনি বললে। প্রতিটা ছোট edit-এর পিছনে পুরো suite চালানো লাগে না।
 - **সরাসরি `main`-এ push** — branch নেই, PR নেই। push করলে CI নিজে থেকে চলে না।
 - **CI চালানোর বোতাম আপনারই** — একটা batch শেষ হলে একবার চালালেই যথেষ্ট।
-- **UI বদলালে ছবি দেখে যাচাই** — `python3 tool/see_screen.py`।
+- **UI বদলালে ছবি দেখে যাচাই** — আগে `python3 tool/local_screenshots.py --shot <নাম>` (ফ্রি, সেকেন্ডে), দরকার হলে `python3 tool/see_screen.py`।
 - **agent আগে অনুমতি নেবে** — tag/release, secrets, store metadata, বা যা
   ফিরিয়ে আনা যায় না এমন কিছুর আগে।
 - এই ব্লকটা `install-agent-pack.sh` চালালে নিজে থেকেই update হয়; নিচের
@@ -290,6 +334,12 @@ down here is never touched).
     A generic "Could not read the key pool" for both is the bug that shipped
     once. Adding a new failure means one enum value, one `describeKeyPoolFailure`
     branch, and one test.
+- **Screenshots:** `python3 tool/local_screenshots.py --list` shows none on
+  purpose. The three admin screens read `FirebaseFirestore.instance` in
+  initState and no Firestore fake fits this package's deliberately wide
+  `cloud_firestore` constraint (see the note at the top of
+  `tool/screenshots/shot_registry.dart`). Add shots there the day a fake or an
+  injection point exists — and not by pinning Firestore down to make a picture.
 - **Extra verification:** CI cannot see Firestore or a real provider. A change
   to selection, cooldown or health-check behaviour needs one manual run against
   a real project: add two keys, kill one, confirm failover and that the dead
