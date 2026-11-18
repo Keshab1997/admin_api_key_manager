@@ -24,8 +24,6 @@ jobs:
     # Pinned, not `@main`: a change to the shared workflow must not silently
     # alter what this package is checked against.
     uses: Keshab1997/flutter-builder/.github/workflows/flutter-build.yml@v1.18.2
-      with:
-        java-version: "21"
     with:
       flutter-channel: stable
       working-directory: "."
