@@ -303,6 +303,14 @@ Navigator.of(context).push(MaterialPageRoute(
 An empty cooldown field means "use the built-in default" (429 → 60s,
 5xx → 120s, other → 30s), which is deliberately different from `0`.
 
+## Example
+
+A runnable host app lives in [`example/`](example/) — `Firebase.initializeApp()` → `Hive.initFlutter()` → `ApiKeyManager.instance.initialize()` with three buttons for the admin screens. See [`example/README.md`](example/README.md).
+
+## Changelog
+
+See [`CHANGELOG.md`](CHANGELOG.md).
+
 ## Configuration
 
 All collection names are configurable on the singleton:
