@@ -392,6 +392,10 @@ Secrets and variables → Actions):
 Without them the step prints `telegram skipped or failed` and the run still
 succeeds — the news stays in the job summary.
 
+To prove the wiring without waiting for a free model to appear: *Actions → Free
+model radar → Run workflow* → **force_notify: true**. That sends one test message
+with the current free-model count, and the step log prints `radar: sent`.
+
 ## Example
 
 A runnable host app lives in [`example/`](example/) — `Firebase.initializeApp()` → `Hive.initFlutter()` → `ApiKeyManager.instance.initialize()` with three buttons for the admin screens. See [`example/README.md`](example/README.md).

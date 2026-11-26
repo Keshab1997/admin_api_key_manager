@@ -182,7 +182,18 @@ def main() -> int:
         added = list(news.get("added") or [])
         removed = list(news.get("removed") or [])
         if not added and not removed:
-            print("radar: nothing to announce")
+            # FORCE_NOTIFY is the CI test switch: prove the token and chat id
+            # work without waiting for a free model to appear.
+            if os.environ.get("FORCE_NOTIFY", "").strip().lower() != "true":
+                print("radar: nothing to announce")
+                return 0
+            total = news.get("total")
+            message = (
+                "✅ Free model radar test — Telegram wiring works. "
+                f"{total if total is not None else '?'} free models on OpenRouter right now."
+            )
+            print(message)
+            print("radar:", "sent" if send_telegram(message) else "telegram skipped or failed")
             return 0
         message = format_news(added, removed)
         print(message)

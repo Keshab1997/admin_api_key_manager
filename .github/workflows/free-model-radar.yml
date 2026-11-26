@@ -28,6 +28,11 @@ on:
     # 02:30 UTC = 08:00 IST. Pick the hour you actually read your phone.
     - cron: '30 2 * * *'
   workflow_dispatch:
+    inputs:
+      force_notify:
+        description: 'Send a test message even when nothing changed (proves the secrets work)'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -75,10 +80,15 @@ jobs:
           python3 -c "import json;d=json.load(open('radar.json'));print('added='+str(len(d['added'])));print('removed='+str(len(d['removed'])))" >> "$GITHUB_OUTPUT"
 
       - name: Push the news to Telegram
-        if: steps.check.outputs.added != '0' || steps.check.outputs.removed != '0'
+        if: >-
+          steps.check.outputs.added != '0' ||
+          steps.check.outputs.removed != '0' ||
+          github.event.inputs.force_notify == 'true'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          # Only affects the "nothing changed" case: sends a test message.
+          FORCE_NOTIFY: ${{ github.event.inputs.force_notify }}
         run: python3 tool/free_model_radar.py --telegram-from radar.json
 
       # Refresh the baseline even when nothing changed, so tomorrow diffs
