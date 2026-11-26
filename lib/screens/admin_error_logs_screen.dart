@@ -87,17 +87,27 @@ class _AdminErrorLogsScreenState extends State<AdminErrorLogsScreen> {
                   size: 18, color: palette.danger),
             ),
             const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Error log',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800, letterSpacing: -0.3)),
-                Text('Last ${widget.limit} failures · newest first',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w600)),
-              ],
+            // Expanded, not a bare Column: the subtitle is a full sentence and
+            // a bare Column sizes to it, so on a 360-390dp phone the title row
+            // overflowed the toolbar (RenderFlex overflow, clipped in release).
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Error log',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800, letterSpacing: -0.3)),
+                  Text('Last ${widget.limit} failures · newest first',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w600)),
+                ],
+              ),
             ),
           ],
         ),

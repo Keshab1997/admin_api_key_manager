@@ -57,17 +57,27 @@ class AdminKeyGroupsScreen extends StatelessWidget {
                   const Icon(Icons.tune_rounded, size: 18, color: Colors.white),
             ),
             const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Provider groups',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800, letterSpacing: -0.3)),
-                Text('Priority & cooldowns per provider',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w600)),
-              ],
+            // Expanded, not a bare Column: the subtitle is a full sentence and
+            // a bare Column sizes to it, so on a 360-390dp phone the title row
+            // overflowed the toolbar (RenderFlex overflow, clipped in release).
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Provider groups',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800, letterSpacing: -0.3)),
+                  Text('Priority & cooldowns per provider',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w600)),
+                ],
+              ),
             ),
           ],
         ),

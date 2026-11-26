@@ -80,6 +80,10 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen>
 
   Timer? _freeCheckDebounce;
 
+  /// True while a save is in flight, so the sheet's CTA cannot be tapped twice
+  /// and Firestore never gets two identical keys.
+  bool _savingSheet = false;
+
   @override
   void initState() {
     super.initState();
@@ -272,12 +276,16 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen>
   CollectionReference<Map<String, dynamic>> get _col =>
       FirebaseFirestore.instance.collection(widget.collection);
 
-  Future<void> _saveKey([AdminApiKey? existing]) async {
+  /// Writes the form to Firestore. Returns true only when the write landed —
+  /// the sheet uses that to decide whether it may close. Popping first (the
+  /// old behaviour) meant a rejected write threw the typed key away and left
+  /// the admin with a toast they could blink and miss.
+  Future<bool> _saveKey([AdminApiKey? existing]) async {
     final key = _keyCtrl.text.trim();
     final name = _nameCtrl.text.trim();
     if (key.isEmpty || name.isEmpty) {
       _toast('Name and key are required');
-      return;
+      return false;
     }
 
     final baseUrl = _baseUrlCtrl.text.trim();
@@ -286,7 +294,7 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen>
         _validate(provider: _provider, baseUrl: baseUrl, model: model);
     if (problem != null) {
       _toast(problem);
-      return;
+      return false;
     }
 
     final data = {
@@ -315,8 +323,12 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen>
         _toast('Key added');
       }
       _clearForm();
+      return true;
     } catch (e) {
+      // The sheet stays open with the form intact, so the admin can fix and
+      // retry instead of retyping a secret they cannot read back.
       _toast('Save failed: $e');
+      return false;
     }
   }
 
@@ -652,19 +664,6 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen>
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // subtle drag handle accent
-                    Center(
-                      child: Container(
-                        width: 36,
-                        height: 4,
-                        margin: const EdgeInsets.only(bottom: 12),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.outlineVariant
-                              .withValues(alpha: 0.5),
-                          borderRadius: BorderRadius.circular(99),
-                        ),
-                      ),
-                    ),
                     Row(
                       children: [
                         Container(
@@ -940,10 +939,17 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen>
                     ),
                     const SizedBox(height: 20),
                     FilledButton(
-                      onPressed: () {
-                        Navigator.pop(sheetContext);
-                        _saveKey(existing);
-                      },
+                      onPressed: _savingSheet
+                          ? null
+                          : () async {
+                              setSheetState(() => _savingSheet = true);
+                              final saved = await _saveKey(existing);
+                              if (!mounted) return;
+                              setSheetState(() => _savingSheet = false);
+                              if (saved && sheetContext.mounted) {
+                                Navigator.pop(sheetContext);
+                              }
+                            },
                       style: FilledButton.styleFrom(
                         backgroundColor: palette.accent,
                         padding: const EdgeInsets.symmetric(vertical: 14),
@@ -954,13 +960,26 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen>
                       child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(
-                                existing != null
-                                    ? Icons.check_rounded
-                                    : Icons.add_rounded,
-                                size: 18),
+                            if (_savingSheet)
+                              const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white),
+                              )
+                            else
+                              Icon(
+                                  existing != null
+                                      ? Icons.check_rounded
+                                      : Icons.add_rounded,
+                                  size: 18),
                             const SizedBox(width: 8),
-                            Text(existing != null ? 'Save changes' : 'Add key',
+                            Text(
+                                _savingSheet
+                                    ? 'Saving…'
+                                    : existing != null
+                                        ? 'Save changes'
+                                        : 'Add key',
                                 style: const TextStyle(
                                     fontWeight: FontWeight.w800,
                                     letterSpacing: 0.2)),
@@ -1193,19 +1212,29 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen>
                   const Icon(Icons.key_rounded, size: 18, color: Colors.white),
             ),
             const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('API keys',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800, letterSpacing: -0.3)),
-                if (_rows.isNotEmpty)
-                  Text(
-                      '${_rows.length} keys · ${_rows.where((r) => r.key.isActive).length} active',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w600)),
-              ],
+            // Expanded, not a bare Column: the subtitle is a full sentence and
+            // a bare Column sizes to it, so on a 360-390dp phone the title row
+            // overflowed the toolbar (RenderFlex overflow, clipped in release).
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('API keys',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800, letterSpacing: -0.3)),
+                  if (_rows.isNotEmpty)
+                    Text(
+                        '${_rows.length} keys · ${_rows.where((r) => r.key.isActive).length} active',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600)),
+                ],
+              ),
             ),
           ],
         ),

@@ -11,28 +11,46 @@ import 'package:admin_api_key_manager/screens/admin_api_keys_screen.dart';
 /// No admin write is needed; this screen only reads a public endpoint and
 /// optionally pushes [AdminApiKeysScreen] with a pre-filled model id.
 class AdminFreeModelsScreen extends StatefulWidget {
-  const AdminFreeModelsScreen({super.key});
+  /// Injectable catalog source. Production leaves this null and the screen
+  /// builds its own; a test passes one so the body can be rendered without
+  /// the network — which is the only way to catch a build/layout failure in
+  /// this screen on a plain JVM.
+  final FreeModelDiscovery? discovery;
+
+  const AdminFreeModelsScreen({super.key, this.discovery});
 
   @override
   State<AdminFreeModelsScreen> createState() => _AdminFreeModelsScreenState();
 }
 
 class _AdminFreeModelsScreenState extends State<AdminFreeModelsScreen> {
-  final _discovery = FreeModelDiscovery();
+  late final FreeModelDiscovery _discovery;
+  bool _ownsDiscovery = false;
   final _searchCtrl = TextEditingController();
   late Future<List<FreeModel>> _future;
   String _provider = 'all';
   bool _freeOnly = true;
 
+  /// The catalog is 300+ free models and each card is ~250dp tall, so rendering
+  /// all of them at once made the screen scroll forever — the reported "no
+  /// matter how much I scroll it keeps scrolling". Pages of 50 keep the list
+  /// finite and give the filter box something to do.
+  static const int _pageSize = 50;
+  int _visible = _pageSize;
+
   @override
   void initState() {
     super.initState();
+    final injected = widget.discovery;
+    _ownsDiscovery = injected == null;
+    _discovery = injected ?? FreeModelDiscovery();
     _future = _discovery.fetchFree();
   }
 
   @override
   void dispose() {
-    _discovery.close();
+    // Never close a client the caller owns.
+    if (_ownsDiscovery) _discovery.close();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -87,17 +105,27 @@ class _AdminFreeModelsScreenState extends State<AdminFreeModelsScreen> {
                   size: 19, color: Colors.white),
             ),
             const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Free models',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800, letterSpacing: -0.3)),
-                Text('OpenRouter catalog · live',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w600)),
-              ],
+            // Expanded, not a bare Column: the subtitle is a full sentence and
+            // a bare Column sizes to it, so on a 360-390dp phone the title row
+            // overflowed the toolbar (RenderFlex overflow, clipped in release).
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Free models',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800, letterSpacing: -0.3)),
+                  Text('OpenRouter catalog · live',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w600)),
+                ],
+              ),
             ),
           ],
         ),
@@ -150,9 +178,19 @@ class _AdminFreeModelsScreenState extends State<AdminFreeModelsScreen> {
             searchCtrl: _searchCtrl,
             provider: _provider,
             freeOnly: _freeOnly,
-            onProviderChanged: (v) => setState(() => _provider = v),
-            onFreeOnlyChanged: (v) => setState(() => _freeOnly = v),
-            onSearchChanged: (_) => setState(() {}),
+            visibleCount: _visible,
+            onShowMore: () => setState(
+                () => _visible += _AdminFreeModelsScreenState._pageSize),
+            // Any filter change starts a new result set at page one.
+            onProviderChanged: (v) => setState(() {
+              _provider = v;
+              _visible = _pageSize;
+            }),
+            onFreeOnlyChanged: (v) => setState(() {
+              _freeOnly = v;
+              _visible = _pageSize;
+            }),
+            onSearchChanged: (_) => setState(() => _visible = _pageSize),
             onOpenKeyUrl: _openUrl,
           );
         },
@@ -167,6 +205,8 @@ class _FreeModelsList extends StatelessWidget {
     required this.searchCtrl,
     required this.provider,
     required this.freeOnly,
+    required this.visibleCount,
+    required this.onShowMore,
     required this.onProviderChanged,
     required this.onFreeOnlyChanged,
     required this.onSearchChanged,
@@ -177,6 +217,8 @@ class _FreeModelsList extends StatelessWidget {
   final TextEditingController searchCtrl;
   final String provider;
   final bool freeOnly;
+  final int visibleCount;
+  final VoidCallback onShowMore;
   final ValueChanged<String> onProviderChanged;
   final ValueChanged<bool> onFreeOnlyChanged;
   final ValueChanged<String> onSearchChanged;
@@ -190,6 +232,7 @@ class _FreeModelsList extends StatelessWidget {
       ..sort();
     final filtered = filterModels(all,
         query: searchCtrl.text, provider: provider, freeOnly: freeOnly);
+    final shown = filtered.take(visibleCount).toList();
 
     return CustomScrollView(
       slivers: [
@@ -410,11 +453,36 @@ class _FreeModelsList extends StatelessWidget {
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
             sliver: SliverList.separated(
-              itemCount: filtered.length,
+              itemCount: shown.length,
               separatorBuilder: (_, __) => const SizedBox(height: 12),
               itemBuilder: (context, i) => _FreeModelCard(
-                model: filtered[i],
+                model: shown[i],
                 onOpenKeyUrl: onOpenKeyUrl,
+              ),
+            ),
+          ),
+        // More results than one page: the footer is what makes the end of the
+        // page an explicit choice instead of an endless list.
+        if (filtered.length > shown.length)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child: OutlinedButton.icon(
+                onPressed: onShowMore,
+                icon: const Icon(Icons.expand_more_rounded, size: 18),
+                label: Text(
+                  'Show more · ${filtered.length - shown.length} left',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: theme.colorScheme.surface,
+                  foregroundColor: palette.accent,
+                  side:
+                      BorderSide(color: palette.accent.withValues(alpha: 0.35)),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
               ),
             ),
           ),
@@ -634,17 +702,24 @@ class _FreeModelCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    OutlinedButton.icon(
-                      onPressed: () => onOpenKeyUrl(model.apiKeyUrl),
-                      icon: const Icon(Icons.key_rounded, size: 16),
-                      label: const Text('Get key',
-                          style: TextStyle(fontWeight: FontWeight.w700)),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 8),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(11)),
-                        visualDensity: VisualDensity.compact,
+                    // Flexible, not fixed: the three actions need ~250dp and a
+                    // 320dp phone only leaves ~230. The label shrinks with an
+                    // ellipsis instead of the row overflowing.
+                    Flexible(
+                      child: OutlinedButton.icon(
+                        onPressed: () => onOpenKeyUrl(model.apiKeyUrl),
+                        icon: const Icon(Icons.key_rounded, size: 16),
+                        label: const Text('Get key',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontWeight: FontWeight.w700)),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 8),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(11)),
+                          visualDensity: VisualDensity.compact,
+                        ),
                       ),
                     ),
                     const Spacer(),

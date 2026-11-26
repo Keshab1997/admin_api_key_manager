@@ -4,6 +4,29 @@ All notable changes to `admin_api_key_manager` are documented here.
 This package follows [Keep a Changelog](https://keepachangelog.com/) and
 uses [Semantic Versioning](https://semver.org/).
 
+## 1.6.2 — 2026-11-26
+
+### Fixed
+- **Free-model screen layout**: the app-bar title row put a full-sentence
+  subtitle in a bare `Column` next to the 36dp badge, so it overflowed by ~32px
+  on a 390dp phone (and more on 320–360dp) — clipped and invisible in a release
+  build. The title/subtitle now sit in `Expanded` with `maxLines: 1` + ellipsis,
+  on all four admin screens. The card action row's "Get key" button is
+  `Flexible`, so copy / Get key / Use no longer overflow on a narrow phone.
+- **Endless free-model scroll**: OpenRouter's catalog has 300+ free entries at
+  ~250dp per card, so the list was ~100,000px long. It now pages 50 at a time
+  with an explicit "Show more · N left" footer; changing the search, provider or
+  "Free only" filter starts a new page.
+- **Adding a key could silently fail**: the sheet called
+  `Navigator.pop()` *before* `_saveKey()`, so a rejected write (validation or
+  Firestore) closed the sheet, discarded the typed key and left only a toast.
+  The sheet now saves first — spinner on the CTA, closes only on success, stays
+  open with the form intact on failure — and cannot submit twice. The duplicate
+  drag handle (sheet `showDragHandle` + a hand-rolled one) is gone.
+- **Testability**: `AdminFreeModelsScreen` takes an optional `FreeModelDiscovery`,
+  so the screen's body can be rendered in a widget test (`test/free_models_screen_test.dart`)
+  without the network; the injected client is never closed by the screen.
+
 ## 1.6.1 — 2026-11-26
 
 ### Fixed
