@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:admin_api_key_manager/models/admin_api_key.dart';
 import 'package:admin_api_key_manager/services/api_key_manager.dart';
 import 'package:admin_api_key_manager/screens/admin_bulk.dart';
@@ -5,6 +6,7 @@ import 'package:admin_api_key_manager/screens/admin_error_logs_screen.dart';
 import 'package:admin_api_key_manager/screens/admin_free_models_screen.dart';
 import 'package:admin_api_key_manager/screens/admin_key_groups_screen.dart';
 import 'package:admin_api_key_manager/services/key_cache.dart';
+import 'package:admin_api_key_manager/services/free_model_discovery.dart';
 import 'package:admin_api_key_manager/services/key_health_checker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:material_ui/material_ui.dart';
@@ -61,6 +63,9 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
   final Set<String> _revealed = {};
 
   AdminKeyFilter _filter = AdminKeyFilter.all;
+  final _scrollCtrl = ScrollController();
+  bool _scrollRestored = false;
+  int _newFreeCount = 0;
 
   /// The rows as last rendered. The app-bar bulk menu and the reorder action
   /// act on the whole pool, not on the filtered view — "disable all keys" must
@@ -72,6 +77,8 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
   bool _reordering = false;
   List<AdminKeyRow> _dragRows = const [];
 
+  Timer? _freeCheckDebounce;
+
   @override
   void initState() {
     super.initState();
@@ -81,10 +88,26 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
     _keyCtrl.addListener(_saveFormDraft);
     _baseUrlCtrl.addListener(_saveFormDraft);
     _modelCtrl.addListener(_saveFormDraft);
+    _scrollCtrl.addListener(_onScroll);
+    // Restore scroll after first frame, then check for new free models
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _restoreScroll();
+      _checkNewFreeModels();
+    });
   }
 
   @override
   void dispose() {
+    _freeCheckDebounce?.cancel();
+    _scrollCtrl.removeListener(_onScroll);
+    // Save final scroll before disposing
+    try {
+      if (_scrollCtrl.hasClients) {
+        // ignore: discarded_futures
+        KeyCache.saveScrollOffset('admin_keys', _scrollCtrl.offset);
+      }
+    } catch (_) {}
+    _scrollCtrl.dispose();
     _nameCtrl.removeListener(_saveFormDraft);
     _keyCtrl.removeListener(_saveFormDraft);
     _baseUrlCtrl.removeListener(_saveFormDraft);
@@ -94,6 +117,80 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
     _baseUrlCtrl.dispose();
     _modelCtrl.dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    // Debounce to avoid writing on every pixel
+    _freeCheckDebounce?.cancel();
+    _freeCheckDebounce = Timer(const Duration(milliseconds: 400), () {
+      try {
+        if (_scrollCtrl.hasClients) {
+          // ignore: discarded_futures
+          KeyCache.saveScrollOffset('admin_keys', _scrollCtrl.offset);
+        }
+      } catch (_) {}
+    });
+  }
+
+  void _restoreScroll() {
+    if (_scrollRestored) return;
+    _scrollRestored = true;
+    try {
+      final off = KeyCache.getScrollOffset('admin_keys');
+      if (off != null && off > 0 && _scrollCtrl.hasClients) {
+        _scrollCtrl.jumpTo(off.clamp(0, _scrollCtrl.position.maxScrollExtent));
+      } else if (off != null && off > 0) {
+        // If not yet attached, try next frame
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          try {
+            if (_scrollCtrl.hasClients) {
+              _scrollCtrl
+                  .jumpTo(off.clamp(0, _scrollCtrl.position.maxScrollExtent));
+            }
+          } catch (_) {}
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _checkNewFreeModels() async {
+    try {
+      // Throttle: 6h
+      final last = KeyCache.getLastFreeCheck();
+      if (last != null && DateTime.now().difference(last).inHours < 6) return;
+      final discovery = FreeModelDiscovery();
+      final free =
+          await discovery.fetchFree().timeout(const Duration(seconds: 10));
+      discovery.close();
+      final ids = free.map((m) => m.id).toList()..sort();
+      final prev = KeyCache.getLastFreeModelIds()..sort();
+      // First run: just save, no alert
+      if (prev.isEmpty) {
+        await KeyCache.saveLastFreeModelIds(ids);
+        await KeyCache.saveLastFreeCheck(DateTime.now());
+        return;
+      }
+      final newIds = ids.where((id) => !prev.contains(id)).toList();
+      await KeyCache.saveLastFreeModelIds(ids);
+      await KeyCache.saveLastFreeCheck(DateTime.now());
+      if (newIds.isNotEmpty && mounted) {
+        setState(() => _newFreeCount = newIds.length);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content:
+                Text('${newIds.length} new free model(s) — tap to explore'),
+            action: SnackBarAction(
+              label: 'View',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                    builder: (_) => const AdminFreeModelsScreen()),
+              ),
+            ),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } catch (_) {}
   }
 
   void _loadFilterDraft() {
@@ -264,9 +361,36 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
       ),
     );
     if (ok != true) return;
+    // Keep a snapshot for undo — delete is the only irreversible action here
+    final backup = k.toMap();
+    // toMap includes Timestamps; for undo we need raw map with serverTimestamp for updatedAt
+    backup['updatedAt'] = FieldValue.serverTimestamp();
     try {
       await _col.doc(k.id).delete();
-      _toast('Key deleted');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('"${k.name}" deleted'),
+          action: SnackBarAction(
+            label: 'Undo',
+            onPressed: () async {
+              try {
+                await _col.doc(k.id).set(backup);
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('"${k.name}" restored')),
+                );
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Undo failed: $e')),
+                );
+              }
+            },
+          ),
+          duration: const Duration(seconds: 5),
+        ),
+      );
     } catch (e) {
       _toast('Delete failed: $e');
     }
@@ -606,6 +730,9 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
     );
     if (ok != true) return;
 
+    // Snapshot for undo — keep ids and isActive so we can flip back
+    final backup = {for (final k in targets) k.id: k.isActive};
+    final wasDelete = action == 'delete';
     try {
       switch (action) {
         case 'enable':
@@ -615,7 +742,43 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
         case 'delete':
           await deleteKeys(_col, targets);
       }
-      _toast('${targets.length} key(s) updated');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${targets.length} key(s) updated'),
+          action: SnackBarAction(
+            label: 'Undo',
+            onPressed: () async {
+              try {
+                if (wasDelete) {
+                  // Re-create each deleted doc
+                  for (final k in targets) {
+                    final m = k.toMap();
+                    m['updatedAt'] = FieldValue.serverTimestamp();
+                    unawaited(_col.doc(k.id).set(m));
+                  }
+                  await Future.delayed(const Duration(milliseconds: 300));
+                } else {
+                  // Flip isActive back
+                  for (final e in backup.entries) {
+                    unawaited(_col.doc(e.key).update({'isActive': e.value}));
+                  }
+                }
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Undone')),
+                );
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Undo failed: $e')),
+                );
+              }
+            },
+          ),
+          duration: const Duration(seconds: 5),
+        ),
+      );
     } catch (e) {
       _toast('Bulk update failed: $e');
     }
@@ -681,13 +844,22 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
             ),
           ),
           IconButton(
-            tooltip: 'Free models',
-            icon: const Icon(Icons.explore_outlined),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const AdminFreeModelsScreen(),
-              ),
+            tooltip: _newFreeCount > 0
+                ? 'Free models ($_newFreeCount new)'
+                : 'Free models',
+            icon: Badge(
+              isLabelVisible: _newFreeCount > 0,
+              label: Text('$_newFreeCount'),
+              child: const Icon(Icons.explore_outlined),
             ),
+            onPressed: () {
+              setState(() => _newFreeCount = 0);
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const AdminFreeModelsScreen(),
+                ),
+              );
+            },
           ),
           if (_rows.isNotEmpty)
             PopupMenuButton<String>(
@@ -759,6 +931,7 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
           final broken = rows.where((r) => r.key.errorCount > 0).length;
 
           return CustomScrollView(
+            controller: _scrollCtrl,
             slivers: [
               SliverToBoxAdapter(
                 child: AdminSummary(

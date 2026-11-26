@@ -141,4 +141,54 @@ class KeyCache {
       await _b.put('filterDraft', filter);
     } catch (_) {}
   }
+
+  // ── Scroll offset (per-list) ──
+  static double? getScrollOffset(String key) {
+    try {
+      final v = _b.get('scroll_$key');
+      if (v is num) return v.toDouble();
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> saveScrollOffset(String key, double offset) async {
+    try {
+      await _b.put('scroll_$key', offset);
+    } catch (_) {}
+  }
+
+  // ── Free model discovery cache ──
+  static List<String> getLastFreeModelIds() {
+    try {
+      final v = _b.get('freeModelIds');
+      if (v is List) return v.map((e) => e.toString()).toList();
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<void> saveLastFreeModelIds(List<String> ids) async {
+    try {
+      await _b.put('freeModelIds', ids);
+    } catch (_) {}
+  }
+
+  static DateTime? getLastFreeCheck() {
+    try {
+      final v = _b.get('freeCheckAt') as String?;
+      if (v == null) return null;
+      return DateTime.tryParse(v);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> saveLastFreeCheck(DateTime at) async {
+    try {
+      await _b.put('freeCheckAt', at.toIso8601String());
+    } catch (_) {}
+  }
 }
