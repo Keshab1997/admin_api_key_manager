@@ -1,0 +1,46 @@
+# Changelog
+
+All notable changes to `admin_api_key_manager` are documented here.
+This package follows [Keep a Changelog](https://keepachangelog.com/) and
+uses [Semantic Versioning](https://semver.org/).
+
+## 1.4.0 — 2026-11-26
+
+### Fixed
+- **Core selection**: `_keyPool` now sorts by `(groupPriority, keyPriority)` — the Firestore listener and `getKeyHealth()` previously used only key priority, so `peekFirstKey()` and the admin health list disagreed with `KeyPoolSelector` on group order.
+- **Dispose re-arm**: `dispose()` clears pool/groups/cooldowns/counters/error queue, resets `_readyCompleter` and closes the Hive box so `initialize()` after `dispose()` no longer returns instantly with an empty pool ([#4](https://github.com/Keshab1997/admin_api_key_manager/issues)).
+- **Cooldown leak**: deactivating a key (3× 401/403) now drops its 365-day cooldown and persists the pruned list — previously the Year-long entry survived restarts via Hive.
+- **Health-check pollute**: health pings no longer `reportFailure('health_check','')`; a local dedup map + Firestore `lastErrorAt` dedup prevents 10 devices logging the same dead key every 30 min, and `api_error_logs` stays free of `userId=''` rows.
+- **URL bugs**: `resolveOpenRouterModel` is case-insensitive for `openrouter`; `pingKeyStatus` trims trailing `/` so `https://…/v1/` + `/models` does not become `//models`.
+
+### Changed
+- `refreshKeys()` → deprecated alias for `refreshFromCache()` (docs now say it reads only the Hive cache, not Firestore).
+- `KeyCache` gains `close()` for clean test re-init.
+
+## 1.3.0 — 2026-11-20
+
+- **Git**: stale `main` (3 commits ahead of `master`) archived as `archive/main-2026-10-05` and deleted — `master` is canonical.
+- **Admin UI**: error copy now uses `key_pool_errors.dart` — `permission-denied` (allowlist the uid) vs `unavailable` (network) are told apart instead of raw Firestore text.
+- **Docs**: `docs/API_SECURITY.md` added — the client-readable key pool is a documented MVP trade-off with a 5-step proxy migration.
+- **CI**: pinned to `flutter-builder@v1.18.9`; `flutter analyze --fatal-infos` + `flutter test` gates match the sibling apps.
+
+## 1.2.0 — 2026-11-15
+
+- **Provider groups**: `AdminKeyGroupsScreen` (`admin_key_groups` collection) — enable/disable a provider, rank it, override 3 cooldown durations.
+- **Cooldown**: `cooldownUntil(keyId)` + `getKeyHealth()` now expose the exact expiry so UI can say “in 4 min”.
+- **Setup**: `ApiKeyManager.initialize()` opens `KeyCache` itself — host no longer must call `KeyCache.init()` first.
+
+## 1.1.0 — 2026-11-10
+
+- **Admin screen** rebuilt as cards (health label + colour via `KeyAdminPalette`, usage/error counts, masked key with reveal, per-filter view, test-connection).
+- **Error logs**: `AdminErrorLogsScreen` + batched `api_error_logs` (30-day sweep, TTL-ready).
+- **Bulk**: enable/disable all keys, delete disabled+errored keys, drag-to-reorder failover → batched Firestore writes.
+
+## 1.0.0 — 2026-10-20
+
+- **Initial release**: `ApiKeyManager` (Firestore `admin_api_keys` pool, round-robin over top-priority enabled group, cooldowns persisted via Hive, health checks, `onAllKeysFailed`), `AdminApiKeysScreen`, `KeyPoolSelector` (Firebase-free).
+
+## 0.x — 2026-08-13 to 2026-10-15
+
+- Widened `cloud_firestore` to `>=5.0.0 <7.0.0` and `firebase_core` to `>=3.0.0 <5.0.0` so the package installs alongside apps on Firestore 6 / Core 4.
+- Provider-aware form: picking `google`/`openrouter` fills `baseUrl`/`model`; custom URLs are never overwritten.

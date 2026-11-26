@@ -1,6 +1,6 @@
 name: Flutter CI — Format, Analyze & Test
 
-# Runs on every push to master as well as on demand.
+# Runs on every push to master, on pull requests targeting master, and on demand.
 #
 # This package is a dependency of several apps (ReplyMate, SpeakEasy, docify),
 # so a break here lands in three repositories at once — and until this file
@@ -10,6 +10,8 @@ name: Flutter CI — Format, Analyze & Test
 on:
   workflow_dispatch:
   push:
+    branches: [master]
+  pull_request:
     branches: [master]
 
 permissions:
