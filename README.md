@@ -37,6 +37,7 @@ Flutter project without copy-pasting.
 - 🔗 **Provider-aware form** — picking a provider fills in its base URL and
   model. A URL you typed yourself is never overwritten; you get an explicit
   "use default" button instead.
+- 🔍 **Free Model Explorer** — live list of free models from `openrouter.ai/api/v1/models` (no key needed) with provider filter, search, context-length badge, and one-tap *Copy model id* + *Get API key* + *Use model* (opens the admin key form).
 
 ---
 
@@ -302,6 +303,22 @@ Navigator.of(context).push(MaterialPageRoute(
 
 An empty cooldown field means "use the built-in default" (429 → 60s,
 5xx → 120s, other → 30s), which is deliberately different from `0`.
+
+## Free Model Explorer
+
+`AdminFreeModelsScreen` fetches `openrouter.ai/api/v1/models` (public, no key) and
+shows every *free* model with provider, context length and a `FREE` badge. Search
+by id/name/provider, filter by provider, `Free only` chip, and one-tap actions:
+*Copy model id*, *Get API key* (opens the provider's key page) and *Use model*
+(pushes `AdminApiKeysScreen` so you paste only the key).
+
+```dart
+Navigator.of(context).push(
+  MaterialPageRoute(builder: (_) => const AdminFreeModelsScreen()),
+);
+```
+
+The AppBar of `AdminApiKeysScreen` already has a 🔍 *Free models* button — no extra wiring needed. For a cached catalogue, wrap `FreeModelDiscovery().fetchFree()` in your own Cloud Function / Firestore doc and pass the list in.
 
 ## Example
 

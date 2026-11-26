@@ -2,6 +2,7 @@ import 'package:admin_api_key_manager/models/admin_api_key.dart';
 import 'package:admin_api_key_manager/services/api_key_manager.dart';
 import 'package:admin_api_key_manager/screens/admin_bulk.dart';
 import 'package:admin_api_key_manager/screens/admin_error_logs_screen.dart';
+import 'package:admin_api_key_manager/screens/admin_free_models_screen.dart';
 import 'package:admin_api_key_manager/screens/admin_key_groups_screen.dart';
 import 'package:admin_api_key_manager/services/key_health_checker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -564,6 +565,15 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
                 builder: (_) => const AdminKeyGroupsScreen(),
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Free models',
+            icon: const Icon(Icons.explore_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const AdminFreeModelsScreen(),
               ),
             ),
           ),

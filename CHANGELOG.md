@@ -4,6 +4,16 @@ All notable changes to `admin_api_key_manager` are documented here.
 This package follows [Keep a Changelog](https://keepachangelog.com/) and
 uses [Semantic Versioning](https://semver.org/).
 
+## 1.5.0 — 2026-11-26
+
+### Added
+- **Free Model Explorer**: `FreeModel` + `FreeModelDiscovery` (live `openrouter.ai/api/v1/models` fetch, free filter, search) + `AdminFreeModelsScreen` (provider dropdown, search, `FREE` badge, context-length, Copy / Get API key / Use model). AppBar of `AdminApiKeysScreen` now has a 🔍 button.
+- **UX split**: `KeyAdminPalette` → `lib/theme/key_admin_palette.dart`, card/summary/states → `lib/screens/widgets/admin_screen_widgets.dart` (screen 1333 → 724 loc).
+
+### Changed
+- `example` now uses `material_ui` so `ThemeData` and `KeyAdminPalette` share the same `ThemeExtension` type; added `material_ui` dep.
+- `pubspec`: added `url_launcher: ^6.2.5` for “Get API key” links.
+
 ## 1.4.0 — 2026-11-26
 
 ### Fixed
