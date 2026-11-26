@@ -24,6 +24,10 @@ uses [Semantic Versioning](https://semver.org/).
     is down.
 - Regression test added: a 1 MB exception at 320/353/390dp must render without
   an exception, keep every `Text` under 400 characters, and still offer Retry.
+- **Catalog timeout 15 s → 30 s.** The payload is ~900 kB of JSON; a 15 s
+  ceiling expired mid-download on a weak mobile connection, so the screen showed
+  its error state for a fetch that would have finished. A timeout is for a hung
+  server, not for a big body.
 
 ## 1.7.0 — 2026-11-26
 

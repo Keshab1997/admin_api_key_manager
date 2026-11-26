@@ -14,8 +14,13 @@ class FreeModelDiscovery {
   static const _openRouterModelsUrl = 'https://openrouter.ai/api/v1/models';
 
   /// Returns all models, with `isFree` set per entry.
+  ///
+  /// 30 s, not 15: OpenRouter's catalog is ~900 kB of JSON, and on a weak
+  /// mobile connection a 15 s ceiling expired mid-download — the screen then
+  /// showed its error state for a fetch that would have finished. A timeout is
+  /// for a hung server, not for a big body.
   Future<List<FreeModel>> fetchAll(
-      {Duration timeout = const Duration(seconds: 15)}) async {
+      {Duration timeout = const Duration(seconds: 30)}) async {
     final res = await _client.get(Uri.parse(_openRouterModelsUrl),
         headers: {'Accept': 'application/json'}).timeout(timeout);
     if (res.statusCode != 200) {
@@ -38,7 +43,7 @@ class FreeModelDiscovery {
 
   /// Returns only the free models (pricing 0,0 or :free suffix).
   Future<List<FreeModel>> fetchFree(
-      {Duration timeout = const Duration(seconds: 15)}) async {
+      {Duration timeout = const Duration(seconds: 30)}) async {
     final all = await fetchAll(timeout: timeout);
     return all.where((m) => m.isFree).toList();
   }
