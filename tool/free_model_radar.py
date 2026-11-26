@@ -121,13 +121,73 @@ def send_telegram(message: str) -> bool:
         return False
 
 
+def format_news(added: list[str], removed: list[str]) -> str:
+    """The Telegram message: a headline plus one line per model."""
+    lines = [f"Free model radar — {len(added)} new, {len(removed)} gone"]
+    lines += [f"new: {model_id}" for model_id in added]
+    lines += [f"gone: {model_id}" for model_id in removed]
+    return "\n".join(lines)
+
+
+def write_summary(
+    path: Path, *, total: int, added: list[str], removed: list[str], baseline: str | None
+) -> None:
+    """Write a Markdown summary for a CI run's `$GITHUB_STEP_SUMMARY`."""
+    lines = [
+        "### Free model radar",
+        "",
+        f"- free models right now: **{total}**",
+        f"- new since the last snapshot: **{len(added)}**",
+        f"- gone: **{len(removed)}**",
+        f"- baseline: `{baseline or 'none yet'}`",
+        "",
+    ]
+    lines += [f"- added `{model_id}`" for model_id in added]
+    lines += [f"- gone `{model_id}`" for model_id in removed]
+    if not added and not removed:
+        lines.append("_nothing changed since the last snapshot_")
+    try:
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    except OSError as error:
+        print(f"radar: could not write the summary ({error})", file=sys.stderr)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--update", action="store_true", help="save today's catalog as the baseline")
     parser.add_argument("--all", action="store_true", help="list every free model, not just changes")
     parser.add_argument("--telegram", action="store_true", help="push news to Telegram when it exists")
     parser.add_argument("--json", action="store_true", help="machine-readable output")
+    parser.add_argument(
+        "--telegram-from",
+        metavar="PATH",
+        help="send the news already written to a --json file (no second fetch)",
+    )
+    parser.add_argument(
+        "--summary",
+        metavar="PATH",
+        help="also write a Markdown summary (GitHub Actions: pass $GITHUB_STEP_SUMMARY)",
+    )
     args = parser.parse_args()
+
+    if args.telegram_from:
+        # The CI workflow diffs once, then sends what it already has — a second
+        # fetch could report a different catalog than the run that decided
+        # there was news at all.
+        try:
+            news = json.loads(Path(args.telegram_from).read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            print(f"radar: could not read {args.telegram_from} — {error}", file=sys.stderr)
+            return 1
+        added = list(news.get("added") or [])
+        removed = list(news.get("removed") or [])
+        if not added and not removed:
+            print("radar: nothing to announce")
+            return 0
+        message = format_news(added, removed)
+        print(message)
+        print("radar:", "sent" if send_telegram(message) else "telegram skipped or failed")
+        return 0
 
     try:
         models = fetch_catalog()
@@ -176,6 +236,15 @@ def main() -> int:
                 context = model.get("contextLength")
                 suffix = f"  ({context:,} ctx)" if isinstance(context, int) else ""
                 print(f"    {model['id']}{suffix}")
+
+    if args.summary:
+        write_summary(
+            Path(args.summary),
+            total=len(models),
+            added=added,
+            removed=removed,
+            baseline=snapshot.get("checkedAt"),
+        )
 
     if args.telegram and (added or removed):
         lines = [f"*Free model radar* — {len(added)} new, {len(removed)} gone"]

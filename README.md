@@ -366,9 +366,31 @@ python3 tool/free_model_radar.py --telegram # push the news (needs TELEGRAM_BOT_
 ```
 
 It compares `tool/free_models_snapshot.json` with the live catalog and prints
-nothing when nothing changed, so it can sit behind any scheduler you already
-run. It does **not** ship a workflow file: a scheduled job is the repo owner's
-call, not something a library adds behind your back.
+nothing when nothing changed.
+
+#### The daily job
+
+`.github/workflows/free-model-radar.yml` runs it every day at **02:30 UTC
+(08:00 IST)** and on demand (*Actions → Free model radar → Run workflow*). No API
+key, no Flutter SDK, no commit back to `master`:
+
+- the snapshot lives in the **Actions cache**, not in git — a daily commit would
+  queue a full Flutter CI run every morning and open a downstream PR in every
+  app that pins this package;
+- the run's summary shows the count and every added/gone model id, so the
+  Actions page is readable without digging into logs;
+- a transient catalog failure is retried three times before the run goes red.
+
+To get the news pushed to Telegram, add two repository secrets (Settings →
+Secrets and variables → Actions):
+
+| Secret | Where it comes from |
+|---|---|
+| `TELEGRAM_BOT_TOKEN` | [@BotFather](https://t.me/BotFather) → `/newbot` |
+| `TELEGRAM_CHAT_ID` | message your bot, then read `https://api.telegram.org/bot<TOKEN>/getUpdates` |
+
+Without them the step prints `telegram skipped or failed` and the run still
+succeeds — the news stays in the job summary.
 
 ## Example
 

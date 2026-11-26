@@ -1,0 +1,94 @@
+name: Free model radar — daily free-model watch
+
+# Once a day: ask OpenRouter's public catalog what it gives away now, diff it
+# against the last snapshot, and push anything new to Telegram. No API key, no
+# Flutter SDK — `GET /api/v1/models` is public and the script is stdlib only.
+#
+# Why this exists next to the in-app 🔍 badge: the badge only tells you when you
+# open the screen. This tells you while you are asleep.
+#
+# Two decisions worth knowing:
+#
+#  * The snapshot lives in the Actions cache, not in a commit. A daily commit on
+#    master would queue a full Flutter CI run every morning (ci.yml has no path
+#    filter) and open a downstream PR in every app that pins this package
+#    (downstream-pr.yml watches lib/, pubspec.yaml and CHANGELOG.md). A lost
+#    cache only costs one baseline — the committed
+#    tool/free_models_snapshot.json is the seed.
+#  * Telegram is optional. Without TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID the
+#    step prints "skipped" and the run still succeeds; the news stays in the job
+#    summary either way.
+#
+# Secrets needed for the push (Settings → Secrets and variables → Actions):
+#   TELEGRAM_BOT_TOKEN  — from @BotFather
+#   TELEGRAM_CHAT_ID    — your chat id; message the bot, then read
+#                         https://api.telegram.org/bot<TOKEN>/getUpdates
+on:
+  schedule:
+    # 02:30 UTC = 08:00 IST. Pick the hour you actually read your phone.
+    - cron: '30 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: free-model-radar
+  cancel-in-progress: false
+
+jobs:
+  radar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # restore-keys without a date lets yesterday's cache be found; the run-id
+      # key is what makes today's refresh savable (a cache key is immutable).
+      - name: Restore the last snapshot
+        uses: actions/cache/restore@v4
+        with:
+          path: tool/free_models_snapshot.json
+          key: free-model-radar-${{ github.run_id }}
+          restore-keys: |
+            free-model-radar-
+
+      - name: Check the catalog
+        id: check
+        run: |
+          set -o pipefail
+          ok=0
+          for attempt in 1 2 3; do
+            if python3 tool/free_model_radar.py --json --summary summary.md > radar.json; then
+              ok=1
+              break
+            fi
+            echo "attempt $attempt failed — retrying in 15s" >&2
+            sleep 15
+          done
+          if [ "$ok" != "1" ]; then
+            echo "::error::the catalog could not be read three times in a row"
+            exit 1
+          fi
+          cat radar.json
+          cat summary.md >> "$GITHUB_STEP_SUMMARY"
+          python3 -c "import json;d=json.load(open('radar.json'));print('added='+str(len(d['added'])));print('removed='+str(len(d['removed'])))" >> "$GITHUB_OUTPUT"
+
+      - name: Push the news to Telegram
+        if: steps.check.outputs.added != '0' || steps.check.outputs.removed != '0'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python3 tool/free_model_radar.py --telegram-from radar.json
+
+      # Refresh the baseline even when nothing changed, so tomorrow diffs
+      # against today rather than against a stale month-old list.
+      - name: Refresh the baseline
+        run: python3 tool/free_model_radar.py --update
+
+      - name: Save the snapshot
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: tool/free_models_snapshot.json
+          key: free-model-radar-${{ github.run_id }}
