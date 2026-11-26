@@ -1,0 +1,193 @@
+name: Downstream PR — bump admin_api_key_manager in apps
+
+# Push to master (where 1.6.1 lives) opens a PR in every Dart app that
+# depends on this package. Apps then see the update as a normal PR, not a
+# silent `pub get` — they can run CI, review changelog, and merge when ready.
+#
+# Why not pub.dev + Dependabot? This package is consumed via `git:` (not pub.dev),
+# so Dependabot has nothing to watch. This workflow is the Dependabot for git deps.
+on:
+  push:
+    branches: [master]
+    paths:
+      - "lib/**"
+      - "pubspec.yaml"
+      - "CHANGELOG.md"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Single repo to update (e.g. Keshab1997/quizbaaz) — empty means all'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version
+        id: ver
+        run: |
+          VER=$(grep '^version:' pubspec.yaml | awk '{print $2}')
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "Resolved $VER from pubspec.yaml"
+
+      - name: Open PRs in downstream apps
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.ver.outputs.version }}
+          TARGET: ${{ inputs.target }}
+        run: |
+          set -e
+          # All Dart apps that may depend on admin_api_key_manager.
+          # The script is safe for repos that don't depend on it — it just skips them.
+          ALL_REPOS=(
+            "Keshab1997/smart_ocr_ai_bridge"
+            "Keshab1997/image-to-text-flutter"
+            "Keshab1997/khoroch-diary"
+            "Keshab1997/ReplyMate-AI"
+            "Keshab1997/karmopath"
+            "Keshab1997/GrammarBondhu"
+            "Keshab1997/SpeakEasy"
+            "Keshab1997/quizbaaz"
+            "Keshab1997/metro-dash"
+            "Keshab1997/ink-fight"
+            "Keshab1997/spendstory"
+            "Keshab1997/app-remover"
+          )
+
+          if [ -n "$TARGET" ]; then
+            REPOS=("$TARGET")
+          else
+            REPOS=("${ALL_REPOS[@]}")
+          fi
+
+          echo "Downstream version $VERSION → ${REPOS[*]}"
+
+          for REPO in "${REPOS[@]}"; do
+            echo "== $REPO =="
+            TMP=$(mktemp -d)
+            # Clone with token so push works. GH_TOKEN is installation token with contents:write.
+            if ! git clone "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "$TMP/repo" 2>&1 | tail -2; then
+              echo "  skip — cannot clone (private or not found)"
+              rm -rf "$TMP"
+              continue
+            fi
+            cd "$TMP/repo"
+
+            # Does this repo actually depend on admin_api_key_manager?
+            if ! grep -rq "admin_api_key_manager" pubspec.yaml 2>/dev/null; then
+              echo "  skip — no admin_api_key_manager in pubspec.yaml"
+              cd - >/dev/null
+              rm -rf "$TMP"
+              continue
+            fi
+
+            # Current ref
+            echo "  pubspec before:"
+            grep -A2 "admin_api_key_manager" pubspec.yaml | head -5 || true
+
+            BRANCH="chore/bump-admin_api_key_manager-${VERSION}"
+            # If branch already exists remote, skip (PR already open for this version)
+            if git ls-remote --heads origin "$BRANCH" | grep -q "$BRANCH"; then
+              echo "  skip — branch $BRANCH already exists (PR open)"
+              cd - >/dev/null
+              rm -rf "$TMP"
+              continue
+            fi
+
+            git checkout -b "$BRANCH"
+
+            # Update pubspec.yaml:
+            # - if `git: ... admin_api_key_manager.git` → keep git, but ensure it tracks master (no tag pin)
+            # - if `admin_api_key_manager: ^x.y.z` → bump to ^$VERSION
+            # - if `admin_api_key_manager: any` → keep any (pub get will resolve)
+            # We only touch the version line when it looks like a semver constraint.
+            if grep -q "admin_api_key_manager:" pubspec.yaml; then
+              # Case 1: version constraint like ^1.5.0 or 1.5.0 or >=1.5.0
+              # Replace the first semver after the colon with ^$VERSION
+              # Keep git: blocks untouched.
+              awk -v ver="^${VERSION}" '
+                /admin_api_key_manager:/ && !done {
+                  # If next non-empty line is "    git:" then this is a git dep — leave it
+                  getline nextline
+                  if (nextline ~ /git:/) {
+                    print $0
+                    print nextline
+                    # copy the rest of git block (url, ref) as-is
+                    while ((getline l) > 0) {
+                      print l
+                      if (l ~ /ref:/) break
+                    }
+                    done=1
+                    next
+                  } else {
+                    # version line — replace constraint
+                    sub(/:.*/, ": " ver)
+                    print $0
+                    print nextline
+                    done=1
+                    next
+                  }
+                }
+                {print}
+              ' pubspec.yaml > pubspec.yaml.tmp && mv pubspec.yaml.tmp pubspec.yaml || true
+
+              # Fallback simple replace for the common `^x.y.z` case if awk missed it
+              if grep -q "admin_api_key_manager: \^" pubspec.yaml; then
+                sed -i -E "s/(admin_api_key_manager:[[:space:]]*)\^[^[:space:]]+/\1^${VERSION}/" pubspec.yaml
+              fi
+            fi
+
+            echo "  pubspec after:"
+            grep -A2 "admin_api_key_manager" pubspec.yaml | head -5 || true
+
+            # Update CHANGELOG hint if repo has one (optional)
+            if [ -f "CHANGELOG.md" ]; then
+              echo "" >> CHANGELOG.md
+              echo "Updated via admin_api_key_manager $VERSION" >> CHANGELOG.md || true
+            fi
+
+            git config user.name "keshab-flutter-assistant"
+            git config user.email "Keshab1997@users.noreply.github.com"
+            git add pubspec.yaml pubspec.lock 2>/dev/null || git add pubspec.yaml
+            if git diff --cached --quiet; then
+              echo "  skip — no diff after bump"
+              cd - >/dev/null
+              rm -rf "$TMP"
+              continue
+            fi
+            git commit -m "chore(deps): bump admin_api_key_manager to $VERSION
+
+            Automated by admin_api_key_manager downstream-pr workflow.
+            Source: Keshab1997/admin_api_key_manager@$VERSION"
+
+            git push -u origin "$BRANCH"
+
+            # Open PR — if one already exists GitHub returns 422, we treat as skip
+            gh pr create \
+              --repo "$REPO" \
+              --title "chore(deps): bump admin_api_key_manager to $VERSION" \
+              --body "Automated bump from **Keshab1997/admin_api_key_manager@$VERSION**.
+
+            - Premium design overhaul (1.6.0) + Test fast (1.6.1): indigo header, premium cards, 8s timeout + spinner
+            - Diff: https://github.com/Keshab1997/admin_api_key_manager/compare/..@$VERSION
+
+            Merge when ready — CI will run \`flutter analyze\` / \`flutter test\` in this app.
+
+            _Workflow: \`.github/workflows/downstream-pr.yml\` in admin_api_key_manager_" \
+              --base master \
+              --head "$BRANCH" || echo "  PR already exists or cannot create — check $REPO"
+
+            cd - >/dev/null
+            rm -rf "$TMP"
+          done
+
+          echo "Done."
