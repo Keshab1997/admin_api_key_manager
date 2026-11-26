@@ -475,6 +475,7 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
       builder: (sheetContext) => StatefulBuilder(
         builder: (context, setSheetState) {
           final theme = Theme.of(context);
+          final palette = KeyAdminPalette.of(context);
           final defaults = AdminApiKey.defaultsFor(_provider);
           final urlIsCustom =
               defaults != null && _baseUrlCtrl.text.trim() != defaults.baseUrl;
@@ -491,27 +492,77 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(existing != null ? 'Edit API key' : 'Add API key',
-                      style: theme.textTheme.titleLarge
-                          ?.copyWith(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 4),
-                  Text(
-                    _provider == 'custom'
-                        ? 'Any endpoint that speaks /chat/completions.'
-                        : 'These are stored in Firestore and read by every '
-                            'device. Use a key you can rotate.',
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  Row(
+                    children: [
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                              colors: [palette.accent, const Color(0xFF8B8CF8)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                            existing != null
+                                ? Icons.edit_rounded
+                                : Icons.add_rounded,
+                            color: Colors.white,
+                            size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                  existing != null
+                                      ? 'Edit API key'
+                                      : 'Add API key',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: -0.3)),
+                              Text(
+                                _provider == 'custom'
+                                    ? 'Any endpoint that speaks /chat/completions.'
+                                    : 'Stored in Firestore · available to every device',
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                    fontWeight: FontWeight.w600),
+                              ),
+                            ]),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 18),
+                  const _SheetSectionLabel(label: 'Key details'),
 
                   TextField(
                     controller: _nameCtrl,
                     textCapitalization: TextCapitalization.words,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Name',
                       hintText: 'Primary OpenRouter',
-                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.label_outline_rounded,
+                          size: 18, color: theme.colorScheme.onSurfaceVariant),
+                      filled: true,
+                      fillColor: theme.colorScheme.surfaceContainerHighest
+                          .withValues(alpha: 0.45),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                              color: theme.colorScheme.outlineVariant
+                                  .withValues(alpha: 0.5))),
+                      enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                              color: theme.colorScheme.outlineVariant
+                                  .withValues(alpha: 0.45))),
+                      focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide:
+                              BorderSide(color: palette.accent, width: 1.4)),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -520,11 +571,29 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
                     obscureText: true,
                     enableSuggestions: false,
                     autocorrect: false,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'API key',
                       hintText: 'sk-or-…',
-                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.vpn_key_outlined,
+                          size: 18, color: theme.colorScheme.onSurfaceVariant),
                       helperText: 'Hidden while typing. Test it before saving.',
+                      filled: true,
+                      fillColor: theme.colorScheme.surfaceContainerHighest
+                          .withValues(alpha: 0.45),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                              color: theme.colorScheme.outlineVariant
+                                  .withValues(alpha: 0.5))),
+                      enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                              color: theme.colorScheme.outlineVariant
+                                  .withValues(alpha: 0.45))),
+                      focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide:
+                              BorderSide(color: palette.accent, width: 1.4)),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -533,9 +602,27 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
                   // should contain, so choosing it afterwards reads backwards.
                   DropdownButtonFormField<String>(
                     initialValue: _provider,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Provider',
-                      border: OutlineInputBorder(),
+                      filled: true,
+                      fillColor: theme.colorScheme.surfaceContainerHighest
+                          .withValues(alpha: 0.45),
+                      prefixIcon: Icon(Icons.hub_outlined,
+                          size: 18, color: theme.colorScheme.onSurfaceVariant),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                              color: theme.colorScheme.outlineVariant
+                                  .withValues(alpha: 0.5))),
+                      enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                              color: theme.colorScheme.outlineVariant
+                                  .withValues(alpha: 0.45))),
+                      focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide:
+                              BorderSide(color: palette.accent, width: 1.4)),
                     ),
                     items: const [
                       DropdownMenuItem(
@@ -566,7 +653,25 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
                     keyboardType: TextInputType.url,
                     decoration: InputDecoration(
                       labelText: 'Base URL',
-                      border: const OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.link_rounded,
+                          size: 18, color: theme.colorScheme.onSurfaceVariant),
+                      filled: true,
+                      fillColor: theme.colorScheme.surfaceContainerHighest
+                          .withValues(alpha: 0.45),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                              color: theme.colorScheme.outlineVariant
+                                  .withValues(alpha: 0.5))),
+                      enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                              color: theme.colorScheme.outlineVariant
+                                  .withValues(alpha: 0.45))),
+                      focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide:
+                              BorderSide(color: palette.accent, width: 1.4)),
                       helperText: _provider == 'google'
                           ? 'Include the API version, e.g. …/v1beta'
                           : _provider == 'custom'
@@ -591,9 +696,28 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
                   TextField(
                     controller: _modelCtrl,
                     onChanged: (_) => setSheetState(() {}),
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Model',
-                      border: OutlineInputBorder(),
+                      hintText: 'e.g. openai/gpt-4o-mini',
+                      prefixIcon: Icon(Icons.memory_outlined,
+                          size: 18, color: theme.colorScheme.onSurfaceVariant),
+                      filled: true,
+                      fillColor: theme.colorScheme.surfaceContainerHighest
+                          .withValues(alpha: 0.45),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                              color: theme.colorScheme.outlineVariant
+                                  .withValues(alpha: 0.5))),
+                      enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                              color: theme.colorScheme.outlineVariant
+                                  .withValues(alpha: 0.45))),
+                      focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide:
+                              BorderSide(color: palette.accent, width: 1.4)),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -601,10 +725,28 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
                   TextFormField(
                     initialValue: _priority.toString(),
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Priority',
-                      helperText: 'Lower is tried first.',
-                      border: OutlineInputBorder(),
+                      helperText: 'Lower is tried first · 1 is highest.',
+                      prefixIcon: Icon(Icons.low_priority_rounded,
+                          size: 18, color: theme.colorScheme.onSurfaceVariant),
+                      filled: true,
+                      fillColor: theme.colorScheme.surfaceContainerHighest
+                          .withValues(alpha: 0.45),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                              color: theme.colorScheme.outlineVariant
+                                  .withValues(alpha: 0.5))),
+                      enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                              color: theme.colorScheme.outlineVariant
+                                  .withValues(alpha: 0.45))),
+                      focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide:
+                              BorderSide(color: palette.accent, width: 1.4)),
                     ),
                     onChanged: (v) {
                       _priority = int.tryParse(v) ?? 1;
@@ -617,11 +759,27 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
                       Navigator.pop(sheetContext);
                       _saveKey(existing);
                     },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child:
-                          Text(existing != null ? 'Save changes' : 'Add key'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: palette.accent,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      elevation: 2,
                     ),
+                    child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                              existing != null
+                                  ? Icons.check_rounded
+                                  : Icons.add_rounded,
+                              size: 18),
+                          const SizedBox(width: 8),
+                          Text(existing != null ? 'Save changes' : 'Add key',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.2)),
+                        ]),
                   ),
                   const SizedBox(height: 8),
                 ],
@@ -818,12 +976,54 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final palette = KeyAdminPalette.of(context);
     return Scaffold(
+      backgroundColor: theme.colorScheme.surfaceContainerLowest,
       appBar: AppBar(
-        title: const Text('API keys'),
+        backgroundColor: theme.colorScheme.surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 1,
+        title: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [palette.accent, const Color(0xFF8B8CF8)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: [
+                  BoxShadow(
+                      color: palette.accent.withValues(alpha: 0.22),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3)),
+                ],
+              ),
+              child:
+                  const Icon(Icons.key_rounded, size: 18, color: Colors.white),
+            ),
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('API keys',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800, letterSpacing: -0.3)),
+                if (_rows.isNotEmpty)
+                  Text(
+                      '${_rows.length} keys · ${_rows.where((r) => r.key.isActive).length} active',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w600)),
+              ],
+            ),
+          ],
+        ),
         centerTitle: false,
-        titleTextStyle:
-            theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
         actions: [
           IconButton(
             tooltip: 'Error log',
@@ -882,8 +1082,13 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showAddForm,
-        icon: const Icon(Icons.add),
-        label: const Text('Add key'),
+        backgroundColor: palette.accent,
+        foregroundColor: Colors.white,
+        elevation: 4,
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('Add key',
+            style: TextStyle(fontWeight: FontWeight.w700, letterSpacing: 0.2)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: _col.orderBy('priority').snapshots(),
@@ -1017,5 +1222,31 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
                 r.key.errorCount > 0 || !r.key.isActive || r.isOnCooldown)
             .toList();
     }
+  }
+}
+
+class _SheetSectionLabel extends StatelessWidget {
+  const _SheetSectionLabel({required this.label});
+  final String label;
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(children: [
+        Container(
+            width: 22,
+            height: 2,
+            decoration: BoxDecoration(
+                color:
+                    KeyAdminPalette.of(context).accent.withValues(alpha: 0.9),
+                borderRadius: BorderRadius.circular(99))),
+        const SizedBox(width: 8),
+        Text(label.toUpperCase(),
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.8,
+                color: Theme.of(context).colorScheme.onSurfaceVariant)),
+      ]),
+    );
   }
 }

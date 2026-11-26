@@ -1,5 +1,6 @@
 import 'package:admin_api_key_manager/models/api_error_log.dart';
 import 'package:admin_api_key_manager/services/api_key_manager.dart';
+import 'package:admin_api_key_manager/theme/key_admin_palette.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -63,8 +64,45 @@ class _AdminErrorLogsScreenState extends State<AdminErrorLogsScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final palette = KeyAdminPalette.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Error log'), centerTitle: false),
+      backgroundColor: theme.colorScheme.surfaceContainerLowest,
+      appBar: AppBar(
+        backgroundColor: theme.colorScheme.surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 1,
+        title: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: palette.danger.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+                border:
+                    Border.all(color: palette.danger.withValues(alpha: 0.18)),
+              ),
+              child: Icon(Icons.receipt_long_rounded,
+                  size: 18, color: palette.danger),
+            ),
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Error log',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800, letterSpacing: -0.3)),
+                Text('Last ${widget.limit} failures · newest first',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600)),
+              ],
+            ),
+          ],
+        ),
+        centerTitle: false,
+      ),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: _col
             .orderBy('timestamp', descending: true)
@@ -75,7 +113,9 @@ class _AdminErrorLogsScreenState extends State<AdminErrorLogsScreen> {
             return _LogsError(error: snap.error);
           }
           if (!snap.hasData) {
-            return const Center(child: CircularProgressIndicator());
+            return Center(
+                child: CircularProgressIndicator(
+                    strokeWidth: 3, color: palette.accent));
           }
 
           final all = snap.data!.docs
@@ -99,18 +139,52 @@ class _AdminErrorLogsScreenState extends State<AdminErrorLogsScreen> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                child: Text(
-                  _summary(all, counts),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                    height: 1.4,
-                  ),
+              Container(
+                margin: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                      color: theme.colorScheme.outlineVariant
+                          .withValues(alpha: 0.55)),
+                  boxShadow: [
+                    BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.03),
+                        blurRadius: 12,
+                        offset: const Offset(0, 3)),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerHighest
+                            .withValues(alpha: 0.8),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(Icons.insights_outlined,
+                          size: 15, color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _summary(all, counts),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          height: 1.4,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               SizedBox(
-                height: 40,
+                height: 44,
                 child: ListView(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -123,8 +197,22 @@ class _AdminErrorLogsScreenState extends State<AdminErrorLogsScreen> {
                             t == _Type.all
                                 ? 'All ${all.length}'
                                 : '${_typeLabels[t]} ${counts[t] ?? 0}',
+                            style: TextStyle(
+                                fontWeight: _filter == t
+                                    ? FontWeight.w800
+                                    : FontWeight.w600,
+                                fontSize: 13),
                           ),
                           selected: _filter == t,
+                          selectedColor: palette.accent.withValues(alpha: 0.13),
+                          backgroundColor: theme.colorScheme.surface,
+                          side: BorderSide(
+                              color: _filter == t
+                                  ? palette.accent.withValues(alpha: 0.28)
+                                  : theme.colorScheme.outlineVariant
+                                      .withValues(alpha: 0.6)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
                           onSelected: (_) => setState(() => _filter = t),
                         ),
                       ),
@@ -138,7 +226,7 @@ class _AdminErrorLogsScreenState extends State<AdminErrorLogsScreen> {
                     : ListView.separated(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                         itemCount: visible.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        separatorBuilder: (_, __) => const SizedBox(height: 10),
                         itemBuilder: (context, i) => _LogTile(log: visible[i]),
                       ),
               ),
@@ -179,92 +267,131 @@ class _LogTile extends StatelessWidget {
 
   final ApiErrorLog log;
 
-  (Color, IconData, String) _tone(ColorScheme scheme) {
+  (Color, IconData, String) _tone(ColorScheme scheme, KeyAdminPalette palette) {
     switch (log.errorType) {
       case 'rate_limit':
-        return (scheme.tertiary, Icons.speed_outlined, 'Rate limit');
+        return (palette.attention, Icons.speed_rounded, 'Rate limit');
       case 'auth_error':
-        return (scheme.error, Icons.lock_outline, 'Auth');
+        return (palette.danger, Icons.lock_rounded, 'Auth');
       case 'server_error':
-        return (scheme.error, Icons.cloud_off_outlined, 'Server');
+        return (palette.danger, Icons.cloud_off_rounded, 'Server');
       case 'network_error':
-        return (scheme.secondary, Icons.wifi_off_outlined, 'Network');
+        return (scheme.secondary, Icons.wifi_off_rounded, 'Network');
       default:
-        return (scheme.onSurfaceVariant, Icons.help_outline, 'Other');
+        return (scheme.onSurfaceVariant, Icons.help_outline_rounded, 'Other');
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final (tone, icon, label) = _tone(theme.colorScheme);
+    final palette = KeyAdminPalette.of(context);
+    final (tone, icon, label) = _tone(theme.colorScheme, palette);
 
-    return Card(
-      margin: EdgeInsets.zero,
-      elevation: 0,
-      color: theme.colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.55)),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 12,
+              offset: const Offset(0, 3)),
+        ],
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              width: 32,
-              height: 32,
+              width: 36,
+              height: 36,
               decoration: BoxDecoration(
                 color: tone.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: tone.withValues(alpha: 0.18)),
               ),
-              child: Icon(icon, size: 17, color: tone),
+              child: Icon(icon, size: 18, color: tone),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Text(
-                        label,
-                        style: theme.textTheme.labelLarge?.copyWith(
-                            color: tone, fontWeight: FontWeight.w700),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: tone.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          label,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                              color: tone,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.3,
+                              fontSize: 11),
+                        ),
                       ),
                       const SizedBox(width: 6),
-                      Text(
-                        'HTTP ${log.statusCode}',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerHighest
+                              .withValues(alpha: 0.7),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'HTTP ${log.statusCode}',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 11),
+                        ),
                       ),
                       const Spacer(),
-                      Text(
-                        _ago(log.timestamp),
-                        style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerHighest
+                              .withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                        child: Text(
+                          _ago(log.timestamp),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w600),
+                        ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 6),
                   Text(
-                    // Honest about what the log does and does not hold: no
-                    // message text, ever — only which key and which feature.
                     '${log.keyName.isEmpty ? 'unknown key' : log.keyName} · '
                     '${log.feature.isEmpty ? 'unknown feature' : log.feature}',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall,
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(fontWeight: FontWeight.w600, height: 1.4),
                   ),
                   if (log.message.isNotEmpty) ...[
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 4),
                     Text(
                       log.message,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
+                        height: 1.4,
                       ),
                     ),
                   ],
@@ -292,17 +419,38 @@ class _LogsEmpty extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              filtered
-                  ? Icons.filter_alt_off_outlined
-                  : Icons.check_circle_outline,
-              size: 40,
-              color: theme.colorScheme.onSurfaceVariant,
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHigh,
+                shape: BoxShape.circle,
+                border: Border.all(
+                    color: theme.colorScheme.outlineVariant
+                        .withValues(alpha: 0.6)),
+              ),
+              child: Icon(
+                filtered
+                    ? Icons.filter_alt_off_rounded
+                    : Icons.check_circle_rounded,
+                size: 32,
+                color: filtered
+                    ? theme.colorScheme.onSurfaceVariant
+                    : const Color(0xFF0EA67A),
+              ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Text(
-              filtered ? 'No failures of this kind.' : 'No failures recorded.',
-              style: theme.textTheme.bodyMedium
+              filtered ? 'No failures of this kind' : 'All clear — no failures',
+              style: theme.textTheme.titleSmall
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              filtered
+                  ? 'Try another filter.'
+                  : 'Failures will appear here with key and feature.',
+              style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
           ],
@@ -320,32 +468,56 @@ class _LogsError extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final palette = KeyAdminPalette.of(context);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.cloud_off_outlined,
-                size: 40, color: theme.colorScheme.error),
-            const SizedBox(height: 12),
-            Text('Could not read the error log.',
-                style: theme.textTheme.titleSmall),
-            const SizedBox(height: 6),
-            Text(
-              '$error',
-              textAlign: TextAlign.center,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: palette.danger.withValues(alpha: 0.10),
+                shape: BoxShape.circle,
+                border:
+                    Border.all(color: palette.danger.withValues(alpha: 0.18)),
+              ),
+              child: Icon(Icons.cloud_off_rounded,
+                  size: 32, color: palette.danger),
+            ),
+            const SizedBox(height: 16),
+            Text('Could not read the error log',
+                style: theme.textTheme.titleSmall
+                    ?.copyWith(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest
+                    .withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                    color: theme.colorScheme.outlineVariant
+                        .withValues(alpha: 0.5)),
+              ),
+              child: Text(
+                '$error',
+                textAlign: TextAlign.center,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant, height: 1.4),
+              ),
             ),
             const SizedBox(height: 10),
             Text(
               'Rules must allow admin read on api_error_logs.',
               textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w600),
             ),
           ],
         ),

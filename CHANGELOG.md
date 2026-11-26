@@ -4,6 +4,15 @@ All notable changes to `admin_api_key_manager` are documented here.
 This package follows [Keep a Changelog](https://keepachangelog.com/) and
 uses [Semantic Versioning](https://semver.org/).
 
+## 1.6.0 — 2026-11-26
+
+### Changed
+- **Premium design overhaul**: `KeyAdminPalette` now carries `accent`/`accentSoft` (indigo) with emerald/amber/rose jewel tones, soft containers and `copyWith`/`lerp` updated; all admin screens rebuilt as premium dashboard — gradient avatars, top accent strips, soft shadows, rounded 20, premium empty/error states.
+- **`AdminApiKeysScreen`**: new indigo app bar with key count subtitle, surface background, indigo FAB, polished bottom sheet (section labels, filled inputs with icons, tonal/test + accent CTA).
+- **`AdminFreeModelsScreen`**: indigo header, filled search with clear, pill provider dropdown, chip for “Free only”, free cards with accent strip, soft badges, tonal actions.
+- **`AdminErrorLogsScreen` / `AdminKeyGroupsScreen`**: matching indigo headers, soft info banners, premium group cards with gradient avatars, cooldown chips, tonal buttons and polished error/empty states.
+- **`AdminScreenWidgets`**: `AdminStat` with top colour strip + icon, `AdminKeyCard` with shadow, key container, pill dots and tonal actions, `ProviderAvatar` gradient, `AdminReorderView` with banner and gradient numbers.
+
 ## 1.5.0 — 2026-11-26
 
 ### Added

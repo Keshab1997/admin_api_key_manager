@@ -28,6 +28,10 @@ class AdminKeyRow {
 
 enum AdminKeyFilter { all, active, trouble }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Reorder
+// ─────────────────────────────────────────────────────────────────────────────
+
 /// Drag-to-reorder, in its own mode with an explicit save.
 ///
 /// Priorities are rewritten across the pool, so the change is shown before it
@@ -49,18 +53,38 @@ class AdminReorderView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final palette = KeyAdminPalette.of(context);
+
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+        Container(
+          margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: palette.accentSoft,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: palette.accent.withValues(alpha: 0.18)),
+          ),
           child: Row(
             children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: palette.accent.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(Icons.swap_vert, size: 18, color: palette.accent),
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'Drag to set which key is tried first. Positions become '
-                  'priority 1, 2, 3… when you save.',
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  'Drag to set failover order. Priority becomes 1, 2, 3… when you save.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface,
+                    height: 1.4,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
             ],
@@ -73,24 +97,54 @@ class AdminReorderView extends StatelessWidget {
             onReorderItem: onReorder,
             itemBuilder: (context, i) {
               final row = rows[i];
-              return Card(
+              return Container(
                 key: ValueKey(row.key.id),
-                margin: const EdgeInsets.only(bottom: 8),
-                elevation: 0,
-                color: theme.colorScheme.surfaceContainerLow,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  side: BorderSide(color: theme.colorScheme.outlineVariant),
+                margin: const EdgeInsets.only(bottom: 10),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                      color: theme.colorScheme.outlineVariant
+                          .withValues(alpha: 0.6)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 10,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: ListTile(
-                  leading: CircleAvatar(
-                    radius: 14,
-                    backgroundColor: theme.colorScheme.primaryContainer,
-                    child: Text(
-                      '${i + 1}',
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: theme.colorScheme.onPrimaryContainer,
-                        fontWeight: FontWeight.w700,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                  leading: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          palette.accent,
+                          palette.accent.withValues(alpha: 0.75)
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(11),
+                      boxShadow: [
+                        BoxShadow(
+                          color: palette.accent.withValues(alpha: 0.25),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Center(
+                      child: Text(
+                        '${i + 1}',
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                     ),
                   ),
@@ -98,14 +152,28 @@ class AdminReorderView extends StatelessWidget {
                     row.key.name.isEmpty ? 'Untitled key' : row.key.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w600),
                   ),
                   subtitle: Text(
                     '${AdminApiKey.providerName(row.key.provider)} · '
                     '${row.key.isActive ? 'enabled' : 'disabled'}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
-                  trailing: const Icon(Icons.drag_handle),
+                  trailing: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest
+                          .withValues(alpha: 0.7),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(Icons.drag_indicator,
+                        size: 18, color: theme.colorScheme.onSurfaceVariant),
+                  ),
                 ),
               );
             },
@@ -114,20 +182,32 @@ class AdminReorderView extends StatelessWidget {
         SafeArea(
           top: false,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
             child: Row(
               children: [
                 Expanded(
                   child: OutlinedButton(
                     onPressed: onCancel,
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
                     child: const Text('Cancel'),
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 12),
                 Expanded(
                   child: FilledButton(
                     onPressed: onSave,
-                    child: const Text('Save order'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: palette.accent,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('Save order',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
                   ),
                 ),
               ],
@@ -138,6 +218,10 @@ class AdminReorderView extends StatelessWidget {
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Summary + stats
+// ─────────────────────────────────────────────────────────────────────────────
 
 class AdminSummary extends StatelessWidget {
   const AdminSummary({
@@ -161,41 +245,69 @@ class AdminSummary extends StatelessWidget {
     final palette = KeyAdminPalette.of(context);
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
               AdminStat(
-                  value: '$active', label: 'active', tone: palette.healthy),
-              const SizedBox(width: 8),
+                value: '$active',
+                label: 'Active',
+                sublabel: total == 0 ? '—' : '$total total',
+                icon: Icons.verified_outlined,
+                tone: palette.healthy,
+              ),
+              const SizedBox(width: 10),
               AdminStat(
                 value: '$trouble',
-                label: trouble == 0 ? 'no errors' : 'need attention',
+                label: trouble == 0 ? 'Healthy' : 'Needs attention',
+                sublabel: trouble == 0 ? 'no errors' : '$trouble flagged',
+                icon: trouble == 0
+                    ? Icons.check_circle_outline
+                    : Icons.warning_amber_rounded,
                 tone: trouble == 0
                     ? theme.colorScheme.onSurfaceVariant
                     : palette.attention,
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               AdminStat(
                 value: '$total',
-                label: 'total',
-                tone: theme.colorScheme.onSurfaceVariant,
+                label: 'Keys',
+                sublabel: active == total ? 'all active' : '$active active',
+                icon: Icons.layers_outlined,
+                tone: palette.accent,
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
+          // Premium segmented filter — icons + subtle accent when selected
           SegmentedButton<AdminKeyFilter>(
             segments: const [
-              ButtonSegment(value: AdminKeyFilter.all, label: Text('All')),
               ButtonSegment(
-                  value: AdminKeyFilter.active, label: Text('Enabled')),
+                value: AdminKeyFilter.all,
+                label: Text('All'),
+                icon: Icon(Icons.apps_outlined, size: 16),
+              ),
               ButtonSegment(
-                  value: AdminKeyFilter.trouble, label: Text('Problems')),
+                value: AdminKeyFilter.active,
+                label: Text('Enabled'),
+                icon: Icon(Icons.bolt_outlined, size: 16),
+              ),
+              ButtonSegment(
+                value: AdminKeyFilter.trouble,
+                label: Text('Issues'),
+                icon: Icon(Icons.error_outline, size: 16),
+              ),
             ],
             selected: {filter},
             showSelectedIcon: false,
+            style: ButtonStyle(
+              visualDensity: VisualDensity.comfortable,
+              shape: WidgetStatePropertyAll(
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
             onSelectionChanged: (s) => onFilter(s.first),
           ),
         ],
@@ -205,44 +317,105 @@ class AdminSummary extends StatelessWidget {
 }
 
 class AdminStat extends StatelessWidget {
-  const AdminStat(
-      {super.key,
-      required this.value,
-      required this.label,
-      required this.tone});
+  const AdminStat({
+    super.key,
+    required this.value,
+    required this.label,
+    required this.tone,
+    this.sublabel,
+    this.icon,
+  });
 
   final String value;
   final String label;
+  final String? sublabel;
   final Color tone;
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 11),
         decoration: BoxDecoration(
-          color:
-              theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(14),
+          color: theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+              color: theme.colorScheme.outlineVariant.withValues(alpha: 0.55)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 12,
+              offset: const Offset(0, 3),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(value,
-                style: theme.textTheme.titleLarge
-                    ?.copyWith(color: tone, fontWeight: FontWeight.w700)),
-            Text(label,
+            Row(
+              children: [
+                if (icon != null)
+                  Container(
+                    width: 26,
+                    height: 26,
+                    decoration: BoxDecoration(
+                      color: tone.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(icon, size: 14, color: tone),
+                  ),
+                const Spacer(),
+                Container(
+                    width: 28,
+                    height: 3,
+                    decoration: BoxDecoration(
+                        color: tone.withValues(alpha: 0.9),
+                        borderRadius: BorderRadius.circular(99))),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              value,
+              style: theme.textTheme.headlineSmall?.copyWith(
+                color: tone,
+                fontWeight: FontWeight.w800,
+                height: 1,
+                letterSpacing: -0.5,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurface,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.2,
+              ),
+            ),
+            if (sublabel != null)
+              Text(
+                sublabel!,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.labelSmall
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontSize: 11,
+                ),
+              ),
           ],
         ),
       ),
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Key card — premium
+// ─────────────────────────────────────────────────────────────────────────────
 
 class AdminKeyCard extends StatelessWidget {
   const AdminKeyCard({
@@ -264,15 +437,12 @@ class AdminKeyCard extends StatelessWidget {
   final VoidCallback onDelete;
   final ValueChanged<bool> onToggle;
 
-  /// Masked always-short form: never leaks length, which alone hints at the
-  /// provider.
   String get _masked => '••••••••••••';
 
   String get _shown {
     final key = row.key.key;
     if (revealed) return key;
     if (key.length <= 8) return _masked;
-    // Prefix only: enough to tell two keys apart, useless as a credential.
     return '${key.substring(0, 4)}$_masked';
   }
 
@@ -282,191 +452,386 @@ class AdminKeyCard extends StatelessWidget {
     final palette = KeyAdminPalette.of(context);
     final k = row.key;
 
-    final (Color tone, String state) = !k.isActive
-        ? (theme.colorScheme.onSurfaceVariant, 'Disabled')
+    final (Color tone, String state, IconData stateIcon) = !k.isActive
+        ? (
+            theme.colorScheme.onSurfaceVariant,
+            'Disabled',
+            Icons.pause_circle_outline
+          )
         : row.isOnCooldown
-            ? (palette.attention, row.cooldownLabel)
+            ? (palette.attention, row.cooldownLabel, Icons.timer_outlined)
             : k.errorCount > 0
-                ? (palette.danger, 'Has errors')
-                : (palette.healthy, 'Healthy');
+                ? (palette.danger, 'Has errors', Icons.error_outline)
+                : (palette.healthy, 'Healthy', Icons.check_circle_outline);
 
-    return Card(
-      margin: EdgeInsets.zero,
-      elevation: 0,
-      color: theme.colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-        ),
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.55)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 32,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 14, 8, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Top accent strip — 3px state colour
+          Container(height: 3, color: tone),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 10, 10),
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ProviderAvatar(provider: k.provider),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        k.name.isEmpty ? 'Untitled key' : k.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w600),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ProviderAvatar(provider: k.provider, tone: tone),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            k.name.isEmpty ? 'Untitled key' : k.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  AdminApiKey.providerName(k.provider),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 6),
+                                child: Container(
+                                  width: 3,
+                                  height: 3,
+                                  decoration: BoxDecoration(
+                                    color: theme.colorScheme.outlineVariant,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              ),
+                              Flexible(
+                                child: Text(
+                                  k.model,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                    fontFamily: 'monospace',
+                                    fontFamilyFallback: const [
+                                      'Roboto Mono',
+                                      'Courier'
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${AdminApiKey.providerName(k.provider)} · ${k.model}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                    const SizedBox(width: 8),
+                    Transform.scale(
+                      scale: 0.88,
+                      child: Switch(
+                        value: k.isActive,
+                        onChanged: onToggle,
+                        thumbColor: WidgetStateProperty.resolveWith((states) {
+                          if (states.contains(WidgetState.selected)) {
+                            return palette.healthy;
+                          }
+                          return null;
+                        }),
+                        trackColor: WidgetStateProperty.resolveWith((states) {
+                          if (states.contains(WidgetState.selected)) {
+                            return palette.healthy.withValues(alpha: 0.22);
+                          }
+                          return null;
+                        }),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 7,
+                  runSpacing: 7,
+                  children: [
+                    AdminPill(
+                        label: state, tone: tone, icon: stateIcon, dot: true),
+                    AdminPill(
+                      label: 'P${k.priority}',
+                      tone: theme.colorScheme.onSurfaceVariant,
+                      icon: Icons.flag_outlined,
+                    ),
+                    if (k.usageCount > 0)
+                      AdminPill(
+                        label: '${k.usageCount} uses',
+                        tone: theme.colorScheme.onSurfaceVariant,
+                        icon: Icons.show_chart,
+                      ),
+                    if (k.errorCount > 0)
+                      AdminPill(
+                        label: '${k.errorCount} errors',
+                        tone: palette.danger,
+                        icon: Icons.warning_amber_rounded,
+                        dot: true,
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest
+                        .withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: theme.colorScheme.outlineVariant
+                            .withValues(alpha: 0.4)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.vpn_key_outlined,
+                          size: 16, color: theme.colorScheme.onSurfaceVariant),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _shown,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontFamily: 'monospace',
+                            fontFamilyFallback: const [
+                              'Roboto Mono',
+                              'Courier'
+                            ],
+                            color: revealed
+                                ? theme.colorScheme.onSurface
+                                : theme.colorScheme.onSurfaceVariant,
+                            letterSpacing: revealed ? 0 : 1.2,
+                            fontWeight:
+                                revealed ? FontWeight.w600 : FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Material(
+                        color: theme.colorScheme.surface,
+                        borderRadius: BorderRadius.circular(9),
+                        child: InkWell(
+                          onTap: onReveal,
+                          borderRadius: BorderRadius.circular(9),
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(9),
+                              border: Border.all(
+                                  color: theme.colorScheme.outlineVariant
+                                      .withValues(alpha: 0.6)),
+                            ),
+                            child: Icon(
+                              revealed
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                              size: 16,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                Switch(
-                  value: k.isActive,
-                  onChanged: onToggle,
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                AdminPill(label: state, tone: tone),
-                const SizedBox(width: 6),
-                AdminPill(
-                  label: 'P${k.priority}',
-                  tone: theme.colorScheme.onSurfaceVariant,
-                ),
-                const SizedBox(width: 6),
-                if (k.usageCount > 0)
-                  AdminPill(
-                    label: '${k.usageCount} uses',
-                    tone: theme.colorScheme.onSurfaceVariant,
-                  ),
-                if (k.errorCount > 0) ...[
-                  const SizedBox(width: 6),
-                  AdminPill(
-                    label: '${k.errorCount} errors',
-                    tone: palette.danger,
-                  ),
-                ],
-              ],
-            ),
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _shown,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontFamily: 'monospace',
-                      fontFamilyFallback: const ['Roboto Mono', 'Courier'],
-                      color: theme.colorScheme.onSurfaceVariant,
-                      letterSpacing: revealed ? 0 : 1.5,
+                const SizedBox(height: 12),
+                Container(
+                    height: 1,
+                    color: theme.colorScheme.outlineVariant
+                        .withValues(alpha: 0.5)),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    FilledButton.tonalIcon(
+                      onPressed: onTest,
+                      icon: const Icon(Icons.bolt_outlined, size: 16),
+                      label: const Text('Test',
+                          style: TextStyle(fontWeight: FontWeight.w700)),
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 8),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(11)),
+                        visualDensity: VisualDensity.compact,
+                      ),
                     ),
-                  ),
-                ),
-                IconButton(
-                  tooltip: revealed ? 'Hide key' : 'Reveal key',
-                  visualDensity: VisualDensity.compact,
-                  icon: Icon(
-                    revealed
-                        ? Icons.visibility_off_outlined
-                        : Icons.visibility_outlined,
-                    size: 20,
-                  ),
-                  onPressed: onReveal,
-                ),
-              ],
-            ),
-            const Divider(height: 1),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton.icon(
-                  onPressed: onTest,
-                  icon: const Icon(Icons.bolt_outlined, size: 18),
-                  label: const Text('Test'),
-                ),
-                IconButton(
-                  tooltip: 'Edit',
-                  icon: const Icon(Icons.edit_outlined),
-                  onPressed: onEdit,
-                ),
-                IconButton(
-                  tooltip: 'Delete',
-                  icon: const Icon(Icons.delete_outline),
-                  color: palette.danger,
-                  onPressed: onDelete,
+                    const SizedBox(width: 8),
+                    OutlinedButton.icon(
+                      onPressed: onEdit,
+                      icon: const Icon(Icons.edit_outlined, size: 16),
+                      label: const Text('Edit'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 8),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(11)),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      tooltip: 'Delete',
+                      onPressed: onDelete,
+                      icon: Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: palette.danger.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                              color: palette.danger.withValues(alpha: 0.14)),
+                        ),
+                        child: Icon(Icons.delete_outline,
+                            size: 16, color: palette.danger),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
 class ProviderAvatar extends StatelessWidget {
-  const ProviderAvatar({super.key, required this.provider});
+  const ProviderAvatar({super.key, required this.provider, this.tone});
 
   final String provider;
+  final Color? tone;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final (IconData icon, Color tone) = switch (provider) {
-      'google' => (Icons.auto_awesome_outlined, theme.colorScheme.primary),
-      'openrouter' => (Icons.alt_route_outlined, theme.colorScheme.tertiary),
-      _ => (Icons.lan_outlined, theme.colorScheme.secondary),
+    final palette = KeyAdminPalette.of(context);
+    final (IconData icon, Color base, List<Color> grad) = switch (provider) {
+      'google' => (
+          Icons.auto_awesome_rounded,
+          const Color(0xFF4285F4),
+          [const Color(0xFF4285F4), const Color(0xFF8AB4F8)]
+        ),
+      'openrouter' => (
+          Icons.alt_route_rounded,
+          palette.accent,
+          [palette.accent, const Color(0xFF8B8CF8)]
+        ),
+      _ => (
+          Icons.lan_rounded,
+          theme.colorScheme.secondary,
+          [theme.colorScheme.secondary, theme.colorScheme.tertiary]
+        ),
     };
 
     return Container(
-      width: 40,
-      height: 40,
+      width: 44,
+      height: 44,
       decoration: BoxDecoration(
-        color: tone.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(12),
+        gradient: LinearGradient(
+          colors: grad,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(13),
+        boxShadow: [
+          BoxShadow(
+            color: base.withValues(alpha: 0.28),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      child: Icon(icon, size: 20, color: tone),
+      child: Icon(icon, size: 22, color: Colors.white),
     );
   }
 }
 
 class AdminPill extends StatelessWidget {
-  const AdminPill({super.key, required this.label, required this.tone});
+  const AdminPill({
+    super.key,
+    required this.label,
+    required this.tone,
+    this.icon,
+    this.dot = false,
+  });
 
   final String label;
   final Color tone;
+  final IconData? icon;
+  final bool dot;
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
-        color: tone.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(8),
+        color: tone.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: tone.withValues(alpha: 0.14)),
       ),
-      child: Text(
-        label,
-        style: Theme.of(context)
-            .textTheme
-            .labelSmall
-            ?.copyWith(color: tone, fontWeight: FontWeight.w600),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (dot)
+            Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(color: tone, shape: BoxShape.circle),
+            )
+          else if (icon != null)
+            Icon(icon, size: 12, color: tone),
+          if (dot || icon != null) const SizedBox(width: 5),
+          Text(
+            label,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: tone,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.15,
+              fontSize: 11.5,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -482,30 +847,64 @@ class AdminEmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final palette = KeyAdminPalette.of(context);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              filtered ? Icons.filter_alt_off_outlined : Icons.key_outlined,
-              size: 40,
-              color: theme.colorScheme.onSurfaceVariant,
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: filtered
+                    ? theme.colorScheme.surfaceContainerHigh
+                    : palette.accentSoft,
+                shape: BoxShape.circle,
+                border: Border.all(
+                    color: filtered
+                        ? theme.colorScheme.outlineVariant
+                            .withValues(alpha: 0.6)
+                        : palette.accent.withValues(alpha: 0.14)),
+              ),
+              child: Icon(
+                filtered ? Icons.filter_alt_off_rounded : Icons.key_rounded,
+                size: 32,
+                color: filtered
+                    ? theme.colorScheme.onSurfaceVariant
+                    : palette.accent,
+              ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
+            Text(
+              filtered ? 'No matching keys' : 'No keys yet',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 6),
             Text(
               filtered
-                  ? 'No keys match this filter.'
-                  : 'No keys yet. Tap “Add key” to add one.',
+                  ? 'Try a different filter — nothing matches the current view.'
+                  : 'Tap “Add key” to add your first provider key. It will appear here and be available to every device.',
               textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                height: 1.5,
+              ),
             ),
             if (filtered) ...[
-              const SizedBox(height: 12),
-              TextButton(
-                  onPressed: onClearFilter, child: const Text('Show all')),
+              const SizedBox(height: 16),
+              FilledButton.tonalIcon(
+                onPressed: onClearFilter,
+                icon: const Icon(Icons.clear_all, size: 18),
+                label: const Text('Show all keys'),
+                style: FilledButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
             ],
           ],
         ),
@@ -523,22 +922,19 @@ class AdminErrorState extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final palette = KeyAdminPalette.of(context);
-    // The four failures have four different fixes. Rendering them all as
-    // "Could not read the key pool" plus raw Firestore text meant an admin
-    // whose account simply was not allowlisted was sent to check the network.
     final failure = classifyKeyPoolError(error);
     final copy = describeKeyPoolFailure(failure);
-    final icon = switch (failure) {
-      KeyPoolFailure.permissionDenied => Icons.lock_outline,
-      KeyPoolFailure.notConfigured => Icons.settings_suggest_outlined,
-      KeyPoolFailure.unreachable => Icons.cloud_off_outlined,
-      KeyPoolFailure.unknown => Icons.error_outline,
-    };
-    final tint = switch (failure) {
-      KeyPoolFailure.permissionDenied => palette.attention,
-      KeyPoolFailure.notConfigured => palette.attention,
-      KeyPoolFailure.unreachable => palette.danger,
-      KeyPoolFailure.unknown => palette.danger,
+    final (IconData icon, Color tint) = switch (failure) {
+      KeyPoolFailure.permissionDenied => (
+          Icons.lock_rounded,
+          palette.attention
+        ),
+      KeyPoolFailure.notConfigured => (
+          Icons.settings_suggest_rounded,
+          palette.attention
+        ),
+      KeyPoolFailure.unreachable => (Icons.cloud_off_rounded, palette.danger),
+      KeyPoolFailure.unknown => (Icons.error_outline_rounded, palette.danger),
     };
     return Center(
       child: Padding(
@@ -546,31 +942,56 @@ class AdminErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 40, color: tint),
-            const SizedBox(height: 12),
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: tint.withValues(alpha: 0.10),
+                shape: BoxShape.circle,
+                border: Border.all(color: tint.withValues(alpha: 0.18)),
+              ),
+              child: Icon(icon, size: 32, color: tint),
+            ),
+            const SizedBox(height: 16),
             Text(
               copy.title,
               textAlign: TextAlign.center,
-              style: theme.textTheme.titleSmall,
+              style: theme.textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 8),
-            Text(
-              copy.detail,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest
+                    .withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                    color: theme.colorScheme.outlineVariant
+                        .withValues(alpha: 0.5)),
+              ),
+              child: Text(
+                copy.detail,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  height: 1.5,
+                ),
+              ),
             ),
-            // Only for a genuinely unexplained error: the other three already
-            // said what to do, and a raw provider string under them is noise.
             if (failure == KeyPoolFailure.unknown) ...[
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               Text(
                 '$error',
                 textAlign: TextAlign.center,
                 maxLines: 4,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontFamily: 'monospace',
+                  fontFamilyFallback: const ['Roboto Mono', 'Courier'],
+                  fontSize: 11,
+                ),
               ),
             ],
           ],
