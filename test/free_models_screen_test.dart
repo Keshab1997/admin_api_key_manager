@@ -94,6 +94,43 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('a 1 MB exception cannot turn the error state into a grey wall',
+      (tester) async {
+    // The regression: a failed fetch whose exception carries the whole response
+    // body was rendered in full inside a non-scrollable Column. Measured on a
+    // 353dp phone that Column wanted 1,112,028 px of height — the screen became
+    // a blank wall you could scroll forever.
+    for (final width in [320.0, 353.0, 390.0]) {
+      tester.view.physicalSize = Size(width * 2, 780 * 2);
+      tester.view.devicePixelRatio = 2.0;
+
+      final discovery = FreeModelDiscovery(
+        client: MockClient((_) async => throw Exception('x' * 1000000)),
+      );
+      await tester
+          .pumpWidget(_app(AdminFreeModelsScreen(discovery: discovery)));
+      await tester.pump();
+      await tester.pump();
+
+      expect(tester.takeException(), isNull, reason: 'width $width');
+      expect(find.text('Could not load catalog'), findsOneWidget,
+          reason: 'width $width');
+      expect(find.text('Retry'), findsOneWidget, reason: 'width $width');
+      expect(find.text('Copy details'), findsOneWidget, reason: 'width $width');
+      expect(find.textContaining('more characters'), findsOneWidget,
+          reason: 'width $width');
+
+      // Nothing huge may reach a Text widget: that is the whole point.
+      final longest = tester
+          .widgetList<Text>(find.byType(Text))
+          .map((t) => (t.data ?? '').length)
+          .fold<int>(0, (a, b) => a > b ? a : b);
+      expect(longest, lessThan(400), reason: 'width $width');
+      discovery.close();
+    }
+    tester.view.reset();
+  });
+
   testWidgets('the app-bar title row fits a narrow phone', (tester) async {
     // The premium app bar puts a 36dp badge next to a title + a full-sentence
     // subtitle. Without a flex child, that row overflowed by 32px at 390dp —

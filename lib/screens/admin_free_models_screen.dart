@@ -808,86 +808,187 @@ class _FreeModelsError extends StatelessWidget {
   final Object? error;
   final Future<void> Function() onRetry;
 
+  /// How much of an exception message is safe to *render*.
+  ///
+  /// Not cosmetic. A failed catalog fetch can hand over an exception whose
+  /// `toString()` is the whole ~900 kB response; the screen used to put that in
+  /// a `Text` inside a non-scrollable `Column`, which measured **1,112,028 px**
+  /// tall on a 353dp phone — a grey wall you can scroll forever and read
+  /// nothing on. One bad response must never cost the screen.
+  static const int _visibleChars = 240;
+  static const int _copyChars = 10000;
+
+  /// The one line worth reading first: what kind of failure this is.
+  static String reason(Object? error) {
+    if (error == null) return 'Unknown error';
+    if (error is FreeModelFetchException) {
+      return 'openrouter.ai answered HTTP ${error.statusCode}';
+    }
+    final text = error.toString();
+    if (text.contains('TimeoutException')) {
+      return 'The request timed out — openrouter.ai did not answer in time';
+    }
+    if (text.contains('SocketException') || text.contains('ClientException')) {
+      return 'Could not reach openrouter.ai — check the connection';
+    }
+    if (text.contains('FormatException')) {
+      return 'The catalog came back as something that is not valid JSON';
+    }
+    return error.runtimeType.toString();
+  }
+
+  static String _clamp(String text, int max) =>
+      text.length <= max ? text : '${text.substring(0, max)}…';
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final palette = KeyAdminPalette.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                color: palette.danger.withValues(alpha: 0.10),
-                shape: BoxShape.circle,
-                border:
-                    Border.all(color: palette.danger.withValues(alpha: 0.18)),
-              ),
-              child: Icon(Icons.cloud_off_rounded,
-                  size: 32, color: palette.danger),
-            ),
-            const SizedBox(height: 16),
-            Text('Could not load catalog',
-                style: theme.textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w800)),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest
-                    .withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                    color: theme.colorScheme.outlineVariant
-                        .withValues(alpha: 0.5)),
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    '$error',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant, height: 1.5),
+    final full = error?.toString() ?? 'No error object was supplied.';
+    final detail = _clamp(full, _visibleChars);
+    final hidden = full.length - detail.length;
+
+    // Scrollable and flex-free on purpose: an error state that can overflow is
+    // a worse bug than the error it is reporting.
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            minHeight: (constraints.maxHeight - 48).clamp(0.0, double.infinity),
+          ),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: palette.danger.withValues(alpha: 0.10),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                        color: palette.danger.withValues(alpha: 0.18)),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Source: openrouter.ai/api/v1/models',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                        fontFamily: 'monospace'),
+                  child: Icon(Icons.cloud_off_rounded,
+                      size: 32, color: palette.danger),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Could not load catalog',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  reason(error),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant, height: 1.4),
+                ),
+                const SizedBox(height: 14),
+                Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest
+                        .withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: theme.colorScheme.outlineVariant
+                            .withValues(alpha: 0.5)),
                   ),
-                ],
-              ),
+                  child: Column(
+                    children: [
+                      Text(
+                        detail,
+                        textAlign: TextAlign.center,
+                        maxLines: 6,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                            height: 1.5),
+                      ),
+                      if (hidden > 0) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          '+$hidden more characters — use Copy details',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 10),
+                        ),
+                      ],
+                      const SizedBox(height: 6),
+                      Text(
+                        'Source: openrouter.ai/api/v1/models',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                            fontFamily: 'monospace'),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: onRetry,
+                      icon: const Icon(Icons.refresh_rounded, size: 18),
+                      label: const Text('Retry',
+                          style: TextStyle(fontWeight: FontWeight.w700)),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: palette.accent,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 12),
+                      ),
+                    ),
+                    // The escape hatch: the full text leaves the screen through
+                    // the clipboard instead of being laid out as a widget.
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        await Clipboard.setData(
+                            ClipboardData(text: _clamp(full, _copyChars)));
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Error details copied'),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.copy_rounded, size: 16),
+                      label: const Text('Copy details',
+                          style: TextStyle(fontWeight: FontWeight.w700)),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Retry',
-                  style: TextStyle(fontWeight: FontWeight.w700)),
-              style: FilledButton.styleFrom(
-                backgroundColor: palette.accent,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// Two-segment switch at the top of the screen. Hand-rolled rather than
-/// [SegmentedButton] so it keeps the pill shape used across the admin screens
-/// and cannot regress with a material version bump.
 class _FreeModelsTabBar extends StatelessWidget {
   const _FreeModelsTabBar({
     required this.index,

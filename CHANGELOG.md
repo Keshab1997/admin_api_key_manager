@@ -4,6 +4,27 @@ All notable changes to `admin_api_key_manager` are documented here.
 This package follows [Keep a Changelog](https://keepachangelog.com/) and
 uses [Semantic Versioning](https://semver.org/).
 
+## 1.7.1 — 2026-11-27
+
+### Fixed
+- **A failed catalog fetch could blank the Free models screen.** `_FreeModelsError`
+  printed the raw exception with `Text('$error')` inside a non-scrollable
+  `Column`. A network failure whose exception text carries the response body
+  (OpenRouter's catalog is ~900 kB) made that Column want **1,112,028 px** of
+  height on a 353dp phone: a grey wall you can scroll forever and read nothing
+  on — the exact symptom reported from the device. The error state now:
+  - reads the failure *type* in one line ("openrouter.ai answered HTTP 500",
+    "The request timed out", "Could not reach openrouter.ai", "not valid JSON");
+  - renders at most 240 characters of the message, with `+N more characters`
+    and a **Copy details** button that puts the full text on the clipboard
+    instead of laying it out;
+  - lives in a `SingleChildScrollView` with a min-height box, so it cannot
+    overflow at any screen width;
+  - sits below the tab bar, so **Free sources** stays usable while the catalog
+    is down.
+- Regression test added: a 1 MB exception at 320/353/390dp must render without
+  an exception, keep every `Text` under 400 characters, and still offer Retry.
+
 ## 1.7.0 — 2026-11-26
 
 ### Added
