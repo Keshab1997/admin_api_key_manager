@@ -1,11 +1,13 @@
 name: Downstream PR — bump admin_api_key_manager in apps
 
-# Push to master (where 1.6.1 lives) opens a PR in every Dart app that
-# depends on this package. Apps then see the update as a normal PR, not a
-# silent `pub get` — they can run CI, review changelog, and merge when ready.
+# Push to master opens a PR in every Dart app that depends on this package, so
+# the apps see the update as a normal PR instead of a silent `pub get`.
 #
 # Why not pub.dev + Dependabot? This package is consumed via `git:` (not pub.dev),
 # so Dependabot has nothing to watch. This workflow is the Dependabot for git deps.
+#
+# Needs the repo secret DOWNSTREAM_TOKEN: GITHUB_TOKEN cannot write to another
+# repo, so without it this job can compute the bump but never publish it.
 on:
   push:
     branches: [master]
@@ -41,11 +43,25 @@ jobs:
 
       - name: Open PRs in downstream apps
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # DOWNSTREAM_TOKEN is a PAT with contents:write + pull-requests:write on
+          # the consumer apps. GITHUB_TOKEN falls back only so the job can run and
+          # report why it cannot publish.
+          GH_TOKEN: ${{ secrets.DOWNSTREAM_TOKEN || secrets.GITHUB_TOKEN }}
+          DOWNSTREAM_TOKEN: ${{ secrets.DOWNSTREAM_TOKEN }}
           VERSION: ${{ steps.ver.outputs.version }}
           TARGET: ${{ inputs.target }}
         run: |
           set -e
+
+          # Cross-repo push needs a token that is not scoped to this repository.
+          # GITHUB_TOKEN is, so a push to a consumer app fails with
+          # "Permission to <app>.git denied to github-actions[bot]". Say it once,
+          # clearly, and stay green instead of failing every package push.
+          if [ -z "${DOWNSTREAM_TOKEN}" ]; then
+            echo "::warning title=Downstream PR skipped — DOWNSTREAM_TOKEN missing::This workflow can compute the bump but not publish it: GITHUB_TOKEN only writes to admin_api_key_manager. Add a repo secret DOWNSTREAM_TOKEN (fine-grained PAT, Repository access = the app repos, permissions Contents: read/write + Pull requests: read/write), then re-run this workflow with target=Keshab1997/quizbaaz."
+            exit 0
+          fi
+
           # All Dart apps that may depend on admin_api_key_manager.
           # The script is safe for repos that don't depend on it — it just skips them.
           ALL_REPOS=(
@@ -74,37 +90,36 @@ jobs:
           for REPO in "${REPOS[@]}"; do
             echo "== $REPO =="
             TMP=$(mktemp -d)
-            # Clone with token so push works. GH_TOKEN is installation token with contents:write.
-            if ! git clone "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "$TMP/repo" 2>&1 | tail -2; then
-              echo "  skip — cannot clone (private or not found)"
+            if ! git clone --quiet "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "$TMP/repo"; then
+              echo "  skip — cannot clone (no access, or not found)"
               rm -rf "$TMP"
               continue
             fi
             cd "$TMP/repo"
 
-            # Does this repo actually depend on admin_api_key_manager?
-            if ! grep -rq "admin_api_key_manager" pubspec.yaml 2>/dev/null; then
-              echo "  skip — no admin_api_key_manager in pubspec.yaml"
+            # Is admin_api_key_manager an actual dependency key? A bare grep also
+            # matched the word inside `description:`, which produced a branch with
+            # no changes in a repo that never depended on this package.
+            if ! grep -qE "^  admin_api_key_manager:" pubspec.yaml 2>/dev/null; then
+              echo "  skip — no admin_api_key_manager dependency"
               cd - >/dev/null
               rm -rf "$TMP"
               continue
             fi
 
-            # Current ref
             echo "  pubspec before:"
-            grep -A2 "admin_api_key_manager" pubspec.yaml | head -5 || true
+            grep -A4 -E "^  admin_api_key_manager:" pubspec.yaml | head -6 || true
 
-            # A `git:` dependency is pinned by pubspec.lock's resolved-ref, not
-            # by the pubspec — `ref: master` already means "latest". So for
-            # these repos editing pubspec.yaml changes nothing and the old
-            # script produced an empty diff and skipped them silently, which is
-            # why a repo could sit on a months-old build with the phone telling
-            # nobody. Rewrite the lock instead.
             IS_GIT_DEP=0
-            if grep -A3 "admin_api_key_manager:" pubspec.yaml | grep -q "git:"; then
+            if grep -A4 -E "^  admin_api_key_manager:" pubspec.yaml | grep -q "git:"; then
               IS_GIT_DEP=1
             fi
 
+            # Failure mode 1 — `ref: master` + pubspec.lock: the lock's
+            # `resolved-ref` is what `flutter pub get` obeys, so the pubspec
+            # already means "latest" and editing it changed nothing. The old
+            # script therefore produced an empty diff and skipped these repos
+            # silently, while the app kept building a months-old copy.
             if [ "$IS_GIT_DEP" = "1" ] && [ -f pubspec.lock ]; then
               echo "  git dependency — bumping pubspec.lock resolved-ref to $GITHUB_SHA"
               awk -v sha="$GITHUB_SHA" -v ver="$VERSION" '
@@ -114,11 +129,34 @@ jobs:
                 inblk && /^  [A-Za-z0-9_]/ && !/^  admin_api_key_manager:/ { inblk = 0 }
                 { print }
               ' pubspec.lock > pubspec.lock.tmp && mv pubspec.lock.tmp pubspec.lock
-              grep -A6 "admin_api_key_manager:" pubspec.lock | head -8 || true
+              grep -A6 -E "^  admin_api_key_manager:" pubspec.lock | head -8 || true
             fi
 
+            # Failure mode 2 — the pubspec pins a commit SHA: no lock to edit, and
+            # even a correct lock would be undone by the next `pub get`, which
+            # re-reads the pubspec. Repoint the pin itself.
+            PIN=$(grep -A4 -E "^  admin_api_key_manager:" pubspec.yaml \
+                    | grep -oE 'ref:[[:space:]]+[0-9a-f]{40}' | grep -oE '[0-9a-f]{40}' | head -1 || true)
+            if [ -n "$PIN" ] && [ "$PIN" != "$GITHUB_SHA" ]; then
+              echo "  pubspec pins ref ${PIN:0:7} — repointing to ${GITHUB_SHA:0:7}"
+              awk -v sha="$GITHUB_SHA" -v pin="$PIN" '
+                /^  admin_api_key_manager:/ { inblk = 1 }
+                inblk && index($0, pin) { sub(pin, sha); print; next }
+                inblk && /^  [A-Za-z0-9_]/ && !/^  admin_api_key_manager:/ { inblk = 0 }
+                { print }
+              ' pubspec.yaml > pubspec.yaml.tmp && mv pubspec.yaml.tmp pubspec.yaml
+            fi
+
+            # A hosted (pub.dev) consumer only needs its version constraint bumped.
+            # Git blocks are left exactly as they are.
+            if [ "$IS_GIT_DEP" = "0" ] && grep -q "admin_api_key_manager: \^" pubspec.yaml; then
+              sed -i -E "s/(admin_api_key_manager:[[:space:]]*)\^[^[:space:]]+/\1^${VERSION}/" pubspec.yaml
+            fi
+
+            echo "  pubspec after:"
+            grep -A4 -E "^  admin_api_key_manager:" pubspec.yaml | head -6 || true
+
             BRANCH="chore/bump-admin_api_key_manager-${VERSION}"
-            # If branch already exists remote, skip (PR already open for this version)
             if git ls-remote --heads origin "$BRANCH" | grep -q "$BRANCH"; then
               echo "  skip — branch $BRANCH already exists (PR open)"
               cd - >/dev/null
@@ -126,92 +164,53 @@ jobs:
               continue
             fi
 
-            git checkout -b "$BRANCH"
-
-            # Update pubspec.yaml:
-            # - if `git: ... admin_api_key_manager.git` → keep git, but ensure it tracks master (no tag pin)
-            # - if `admin_api_key_manager: ^x.y.z` → bump to ^$VERSION
-            # - if `admin_api_key_manager: any` → keep any (pub get will resolve)
-            # We only touch the version line when it looks like a semver constraint.
-            if grep -q "admin_api_key_manager:" pubspec.yaml; then
-              # Case 1: version constraint like ^1.5.0 or 1.5.0 or >=1.5.0
-              # Replace the first semver after the colon with ^$VERSION
-              # Keep git: blocks untouched.
-              awk -v ver="^${VERSION}" '
-                /admin_api_key_manager:/ && !done {
-                  # If next non-empty line is "    git:" then this is a git dep — leave it
-                  getline nextline
-                  if (nextline ~ /git:/) {
-                    print $0
-                    print nextline
-                    # copy the rest of git block (url, ref) as-is
-                    while ((getline l) > 0) {
-                      print l
-                      if (l ~ /ref:/) break
-                    }
-                    done=1
-                    next
-                  } else {
-                    # version line — replace constraint
-                    sub(/:.*/, ": " ver)
-                    print $0
-                    print nextline
-                    done=1
-                    next
-                  }
-                }
-                {print}
-              ' pubspec.yaml > pubspec.yaml.tmp && mv pubspec.yaml.tmp pubspec.yaml || true
-
-              # Fallback simple replace for the common `^x.y.z` case if awk missed it
-              if grep -q "admin_api_key_manager: \^" pubspec.yaml; then
-                sed -i -E "s/(admin_api_key_manager:[[:space:]]*)\^[^[:space:]]+/\1^${VERSION}/" pubspec.yaml
-              fi
-            fi
-
-            echo "  pubspec after:"
-            grep -A2 "admin_api_key_manager" pubspec.yaml | head -5 || true
-
             # No CHANGELOG edit: a line pushed into the consumer's own changelog
             # is noise that hides the real entries.
-
             git config user.name "keshab-flutter-assistant"
             git config user.email "Keshab1997@users.noreply.github.com"
             git add pubspec.yaml pubspec.lock 2>/dev/null || git add pubspec.yaml
             if git diff --cached --quiet; then
-              echo "  skip — no diff after bump"
+              echo "  skip — already on $VERSION (nothing to change)"
               cd - >/dev/null
               rm -rf "$TMP"
               continue
             fi
-            git commit -m "chore(deps): bump admin_api_key_manager to $VERSION
 
-            Automated by admin_api_key_manager downstream-pr workflow.
-            Source: Keshab1997/admin_api_key_manager@$VERSION"
+            git checkout -b "$BRANCH"
+            git commit -q -F - <<MSG
+          chore(deps): bump admin_api_key_manager to $VERSION
 
-            git push -u origin "$BRANCH"
+          Automated by the downstream-pr workflow in
+          Keshab1997/admin_api_key_manager. Source commit: $GITHUB_SHA.
+          MSG
 
-            # The default branch, not a hard-coded `master`: quizbaaz is on
-            # `main`, so every PR attempt there failed with "base not found".
+            if ! git push --quiet -u origin "$BRANCH"; then
+              echo "::error title=Cannot push to $REPO::The token in DOWNSTREAM_TOKEN lacks contents:write on $REPO."
+              cd - >/dev/null
+              rm -rf "$TMP"
+              continue
+            fi
+
+            # The repo's own default branch, not a hard-coded `master`: quizbaaz
+            # is on `main`, so `--base master` could never open a PR there.
             BASE=$(gh repo view "$REPO" --json defaultBranchRef -q .defaultBranchRef.name 2>/dev/null || echo "")
             if [ -z "$BASE" ]; then BASE="master"; fi
             echo "  base branch: $BASE"
 
-            # Open PR — if one already exists GitHub returns 422, we treat as skip
             gh pr create \
               --repo "$REPO" \
               --title "chore(deps): bump admin_api_key_manager to $VERSION" \
               --body "Automated bump to **Keshab1997/admin_api_key_manager@$VERSION** ($GITHUB_SHA).
 
-            - What changed: https://github.com/Keshab1997/admin_api_key_manager/blob/master/CHANGELOG.md
+          - What changed: https://github.com/Keshab1997/admin_api_key_manager/blob/master/CHANGELOG.md
 
-            For a \`git:\` dependency this PR touches only \`pubspec.lock\` — that file, not \`ref: master\`, is what \`flutter pub get\` obeys, so an app can otherwise keep building a months-old copy while master moves on.
+          For a \`git:\` dependency this PR touches only \`pubspec.lock\` (or the pinned \`ref:\`) — \`ref: master\` alone means nothing to \`flutter pub get\`, so an app can otherwise keep building a months-old copy while master moves on.
 
-            Merge when ready — CI will run \`flutter analyze\` / \`flutter test\` in this app.
+          Merge when ready — CI runs \`flutter analyze\` / \`flutter test\` in this app.
 
-            _Workflow: \`.github/workflows/downstream-pr.yml\` in admin_api_key_manager_" \
+          _Workflow: \`.github/workflows/downstream-pr.yml\` in admin_api_key_manager_" \
               --base "$BASE" \
-              --head "$BRANCH" || echo "  PR already exists or cannot create — check $REPO"
+              --head "$BRANCH" || echo "  PR already exists or cannot be created — check $REPO"
 
             cd - >/dev/null
             rm -rf "$TMP"

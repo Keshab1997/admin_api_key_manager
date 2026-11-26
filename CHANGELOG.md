@@ -22,6 +22,11 @@ uses [Semantic Versioning](https://semver.org/).
   the lock, targets the repo's *actual* default branch (`main`, not a
   hard-coded `master`), and no longer appends a line to the consumer's own
   CHANGELOG.
+- **The job needs `DOWNSTREAM_TOKEN`.** `GITHUB_TOKEN` is scoped to this
+  repository, so a push to a consumer app is refused with `Permission to
+  <app>.git denied to github-actions[bot]` — the bump was committed locally and
+  then thrown away. Without the secret the job now says so in one warning and
+  stays green, instead of turning every package push red.
 
 ## 1.7.1 — 2026-11-27
 
