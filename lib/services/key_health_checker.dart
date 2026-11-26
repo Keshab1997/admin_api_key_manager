@@ -71,7 +71,7 @@ Future<int> pingKeyStatus({
               'generationConfig': {'maxOutputTokens': 5},
             }),
           )
-          .timeout(const Duration(seconds: 15));
+          .timeout(const Duration(seconds: 8));
       return response.statusCode;
     }
     final url = Uri.parse('$normalizedBase/chat/completions');
@@ -90,7 +90,7 @@ Future<int> pingKeyStatus({
             'max_tokens': 5,
           }),
         )
-        .timeout(const Duration(seconds: 15));
+        .timeout(const Duration(seconds: 8));
     return response.statusCode;
   } catch (_) {
     // Network / timeout / bad URL → 0, treated as "unknown, don't act".

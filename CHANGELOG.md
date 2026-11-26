@@ -4,6 +4,11 @@ All notable changes to `admin_api_key_manager` are documented here.
 This package follows [Keep a Changelog](https://keepachangelog.com/) and
 uses [Semantic Versioning](https://semver.org/).
 
+## 1.6.1 — 2026-11-26
+
+### Fixed
+- **Test latency**: `pingKeyStatus` timeout 15s → 8s (5-token Hi ping rarely needs >3s; worst-case now half as long). `AdminApiKeysScreen._testConnection` now shows an instant modal spinner with provider/model and “usually <3s” hint instead of a fleeting toast, plus elapsed time (e.g. “HTTP 200 in 1.2s”) and a Cancel button; perceived delay feels like progress, not freeze.
+
 ## 1.6.0 — 2026-11-26
 
 ### Changed

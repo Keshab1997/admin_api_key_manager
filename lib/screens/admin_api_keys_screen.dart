@@ -406,32 +406,174 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen>
   }
 
   Future<void> _testConnection(AdminApiKey k) async {
-    _toast('Testing ${k.name}…');
+    final stopwatch = Stopwatch()..start();
+    // Instant feedback — a toast disappears before the network round-trip.
+    // A modal spinner stays until the provider answers or 8s timeout hits,
+    // so "late answer" feels like progress, not freeze.
+    if (!mounted) return;
+    // Use root navigator so it sits above the scaffold and can be popped
+    // even if the user taps elsewhere.
+    unawaited(
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: KeyAdminPalette.of(ctx).accent,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text('Testing ${k.name}',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w700, fontSize: 16)),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${AdminApiKey.providerName(k.provider)} · ${k.model}',
+                  style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(ctx).colorScheme.onSurfaceVariant),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Pinging a 5-token “Hi”… usually <3s. Timeout is 8s.',
+                  style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                      height: 1.4),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  // Close spinner; the ping still completes but result is ignored
+                  // because we check `mounted` and dialog state.
+                  Navigator.of(ctx).pop();
+                },
+                child: const Text('Cancel'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    // Small delay so dialog builds before network blocks the frame.
+    await Future<void>.delayed(const Duration(milliseconds: 120));
     final status = await pingKeyStatus(
       provider: k.provider,
       baseUrl: k.baseUrl,
       apiKey: k.key,
       model: k.model,
     );
+    stopwatch.stop();
     if (!mounted) return;
-    final detail = switch (status) {
-      200 => 'Connected successfully (HTTP 200).',
-      401 || 403 => 'The provider rejected this key (HTTP $status). It may be '
-          'revoked or from another project.',
-      429 => 'Rate limited (HTTP 429). The key works but is over its quota.',
-      0 => 'Could not reach the provider: network, timeout or bad URL.',
-      _ => 'Failed with HTTP $status.',
+    // Close the spinner if still showing. If user hit Cancel, dialog is already
+    // gone and canPop will be false, so we don't pop the page itself.
+    try {
+      final nav = Navigator.of(context, rootNavigator: true);
+      if (nav.canPop()) nav.pop();
+    } catch (_) {}
+    // Tiny pause so the pop animation finishes before the result dialog.
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    if (!mounted) return;
+    final ms = stopwatch.elapsedMilliseconds;
+    final elapsed =
+        ms < 1000 ? '${ms}ms' : '${(ms / 1000).toStringAsFixed(1)}s';
+    final (String title, String detail, IconData icon, Color tint) =
+        switch (status) {
+      200 => (
+          'Connected',
+          'HTTP 200 in $elapsed — key works and model is reachable.',
+          Icons.check_circle_rounded,
+          KeyAdminPalette.of(context).healthy,
+        ),
+      401 || 403 => (
+          'Auth failed',
+          'HTTP $status in $elapsed — provider rejected this key. It may be revoked or from another project.',
+          Icons.lock_rounded,
+          KeyAdminPalette.of(context).danger,
+        ),
+      429 => (
+          'Rate limited',
+          'HTTP 429 in $elapsed — key is valid but over quota. Try again later.',
+          Icons.speed_rounded,
+          KeyAdminPalette.of(context).attention,
+        ),
+      0 => (
+          'Unreachable',
+          'No response in $elapsed — network, timeout (8s) or bad base URL.',
+          Icons.cloud_off_rounded,
+          KeyAdminPalette.of(context).danger,
+        ),
+      _ => (
+          'Failed',
+          'HTTP $status in $elapsed.',
+          Icons.error_outline_rounded,
+          KeyAdminPalette.of(context).danger,
+        ),
     };
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: Text('Test: ${k.name}'),
-        content: Text(detail),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context), child: const Text('OK')),
-        ],
-      ),
+      builder: (ctx) {
+        return AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: tint.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: tint.withValues(alpha: 0.18)),
+                ),
+                child: Icon(icon, size: 18, color: tint),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w800, fontSize: 16)),
+                    Text(k.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(ctx).textTheme.labelSmall?.copyWith(
+                            color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          content: Text(detail,
+              style: Theme.of(ctx).textTheme.bodySmall?.copyWith(height: 1.5)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
     );
   }
 
