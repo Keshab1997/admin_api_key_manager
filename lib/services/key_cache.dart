@@ -98,4 +98,47 @@ class KeyCache {
       List<Map<String, dynamic>> cooldowns) async {
     await _b.put('adminKeyCooldowns', cooldowns);
   }
+
+  // ── Form draft (survives web refresh) ──
+  // The add/edit sheet lives in controllers owned by the screen. A web
+  // refresh kills the whole widget tree, so without this the admin would
+  // retype the key, baseUrl and model. Draft is local-only, per-device.
+
+  static Map<String, dynamic>? getFormDraft() {
+    try {
+      final raw = _b.get('formDraft');
+      if (raw == null) return null;
+      return Map<String, dynamic>.from(raw as Map);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> saveFormDraft(Map<String, dynamic> draft) async {
+    try {
+      await _b.put('formDraft', draft);
+    } catch (_) {}
+  }
+
+  static Future<void> clearFormDraft() async {
+    try {
+      await _b.delete('formDraft');
+    } catch (_) {}
+  }
+
+  // Draft for the filter/reorder view — so a refresh keeps the same list
+  // the admin was looking at, not always "All".
+  static String? getFilterDraft() {
+    try {
+      return _b.get('filterDraft') as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> saveFilterDraft(String filter) async {
+    try {
+      await _b.put('filterDraft', filter);
+    } catch (_) {}
+  }
 }

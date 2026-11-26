@@ -4,6 +4,7 @@ import 'package:admin_api_key_manager/screens/admin_bulk.dart';
 import 'package:admin_api_key_manager/screens/admin_error_logs_screen.dart';
 import 'package:admin_api_key_manager/screens/admin_free_models_screen.dart';
 import 'package:admin_api_key_manager/screens/admin_key_groups_screen.dart';
+import 'package:admin_api_key_manager/services/key_cache.dart';
 import 'package:admin_api_key_manager/services/key_health_checker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:material_ui/material_ui.dart';
@@ -72,12 +73,102 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
   List<AdminKeyRow> _dragRows = const [];
 
   @override
+  void initState() {
+    super.initState();
+    _loadFilterDraft();
+    _loadFormDraft();
+    _nameCtrl.addListener(_saveFormDraft);
+    _keyCtrl.addListener(_saveFormDraft);
+    _baseUrlCtrl.addListener(_saveFormDraft);
+    _modelCtrl.addListener(_saveFormDraft);
+  }
+
+  @override
   void dispose() {
+    _nameCtrl.removeListener(_saveFormDraft);
+    _keyCtrl.removeListener(_saveFormDraft);
+    _baseUrlCtrl.removeListener(_saveFormDraft);
+    _modelCtrl.removeListener(_saveFormDraft);
     _nameCtrl.dispose();
     _keyCtrl.dispose();
     _baseUrlCtrl.dispose();
     _modelCtrl.dispose();
     super.dispose();
+  }
+
+  void _loadFilterDraft() {
+    try {
+      final saved = KeyCache.getFilterDraft();
+      if (saved != null) {
+        final parsed = AdminKeyFilter.values.firstWhere(
+          (f) => f.name == saved,
+          orElse: () => AdminKeyFilter.all,
+        );
+        _filter = parsed;
+      }
+    } catch (_) {}
+  }
+
+  void _saveFilterDraft() {
+    // ignore: discarded_futures
+    KeyCache.saveFilterDraft(_filter.name);
+  }
+
+  void _loadFormDraft() {
+    try {
+      final draft = KeyCache.getFormDraft();
+      if (draft == null || draft.isEmpty) return;
+      // Don't overwrite if user already has typed something (e.g. _edit called)
+      // This only runs once at init, so it's safe to restore.
+      final hasExisting = _nameCtrl.text.isNotEmpty || _keyCtrl.text.isNotEmpty;
+      if (hasExisting) return;
+      // Only restore if at least one field is non-empty and differs from defaults
+      final defaults = AdminApiKey.providerDefaults[_initialProvider]!;
+      final isEmptyDefault = draft['name'] == '' &&
+          draft['key'] == '' &&
+          draft['baseUrl'] == defaults.baseUrl &&
+          draft['model'] == defaults.model &&
+          draft['provider'] == _initialProvider &&
+          (draft['priority'] == 1 || draft['priority'] == null);
+      if (isEmptyDefault) return;
+      _nameCtrl.text = draft['name'] as String? ?? '';
+      _keyCtrl.text = draft['key'] as String? ?? '';
+      _baseUrlCtrl.text = draft['baseUrl'] as String? ?? defaults.baseUrl;
+      _modelCtrl.text = draft['model'] as String? ?? defaults.model;
+      _provider = draft['provider'] as String? ?? _initialProvider;
+      _priority = (draft['priority'] as int?) ?? 1;
+      // Show a one-time hint so admin knows why fields are filled
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Draft restored — your unsaved form was kept after refresh.'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      });
+    } catch (_) {}
+  }
+
+  void _saveFormDraft() {
+    try {
+      // ignore: discarded_futures
+      KeyCache.saveFormDraft({
+        'name': _nameCtrl.text,
+        'key': _keyCtrl.text,
+        'baseUrl': _baseUrlCtrl.text,
+        'model': _modelCtrl.text,
+        'provider': _provider,
+        'priority': _priority,
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _clearFormDraft() async {
+    try {
+      await KeyCache.clearFormDraft();
+    } catch (_) {}
   }
 
   CollectionReference<Map<String, dynamic>> get _col =>
@@ -235,7 +326,20 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
   /// without it, opening "add" after editing a key shows that key's values —
   /// including its secret — and saving would silently clone it.
   void _showAddForm() {
-    _clearForm();
+    // If a draft was restored after a web refresh, keep it — the admin tapped
+    // "Add" to continue where they left off, not to start blank.
+    final hasRestoredDraft = KeyCache.getFormDraft() != null &&
+        (_nameCtrl.text.isNotEmpty ||
+            _keyCtrl.text.isNotEmpty ||
+            _baseUrlCtrl.text !=
+                AdminApiKey.providerDefaults[_initialProvider]!.baseUrl ||
+            _modelCtrl.text !=
+                AdminApiKey.providerDefaults[_initialProvider]!.model ||
+            _provider != _initialProvider ||
+            _priority != 1);
+    if (!hasRestoredDraft) {
+      _clearForm();
+    }
     _showForm();
   }
 
@@ -323,6 +427,7 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
                       final changed = _applyProviderDefaults(provider);
                       setSheetState(() => _provider = provider);
                       setState(() {});
+                      _saveFormDraft();
                       if (changed) {
                         _toast('Base URL and model set for '
                             '${AdminApiKey.providerName(provider)}');
@@ -377,7 +482,10 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
                       helperText: 'Lower is tried first.',
                       border: OutlineInputBorder(),
                     ),
-                    onChanged: (v) => _priority = int.tryParse(v) ?? 1,
+                    onChanged: (v) {
+                      _priority = int.tryParse(v) ?? 1;
+                      _saveFormDraft();
+                    },
                   ),
                   const SizedBox(height: 20),
                   FilledButton(
@@ -409,6 +517,10 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
     _baseUrlCtrl.text = defaults.baseUrl;
     _modelCtrl.text = defaults.model;
     _priority = 1;
+    // Form is now empty — don't keep a stale draft that would restore it
+    // on next refresh. Listeners will save the cleared state, so delete first.
+    // ignore: discarded_futures
+    _clearFormDraft();
   }
 
   /// Applies a provider's endpoint and model when the dropdown changes.
@@ -654,7 +766,10 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
                   active: rows.where((r) => r.key.isActive).length,
                   trouble: broken,
                   filter: _filter,
-                  onFilter: (f) => setState(() => _filter = f),
+                  onFilter: (f) {
+                    setState(() => _filter = f);
+                    _saveFilterDraft();
+                  },
                 ),
               ),
               if (rows.length > 1)
