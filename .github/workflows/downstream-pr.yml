@@ -94,6 +94,29 @@ jobs:
             echo "  pubspec before:"
             grep -A2 "admin_api_key_manager" pubspec.yaml | head -5 || true
 
+            # A `git:` dependency is pinned by pubspec.lock's resolved-ref, not
+            # by the pubspec — `ref: master` already means "latest". So for
+            # these repos editing pubspec.yaml changes nothing and the old
+            # script produced an empty diff and skipped them silently, which is
+            # why a repo could sit on a months-old build with the phone telling
+            # nobody. Rewrite the lock instead.
+            IS_GIT_DEP=0
+            if grep -A3 "admin_api_key_manager:" pubspec.yaml | grep -q "git:"; then
+              IS_GIT_DEP=1
+            fi
+
+            if [ "$IS_GIT_DEP" = "1" ] && [ -f pubspec.lock ]; then
+              echo "  git dependency — bumping pubspec.lock resolved-ref to $GITHUB_SHA"
+              awk -v sha="$GITHUB_SHA" -v ver="$VERSION" '
+                /^  admin_api_key_manager:/ { inblk = 1 }
+                inblk && /^    version:/ { sub(/version:.*/, "version: \"" ver "\""); print; next }
+                inblk && /resolved-ref:/ { sub(/resolved-ref:.*/, "resolved-ref: \"" sha "\""); print; next }
+                inblk && /^  [A-Za-z0-9_]/ && !/^  admin_api_key_manager:/ { inblk = 0 }
+                { print }
+              ' pubspec.lock > pubspec.lock.tmp && mv pubspec.lock.tmp pubspec.lock
+              grep -A6 "admin_api_key_manager:" pubspec.lock | head -8 || true
+            fi
+
             BRANCH="chore/bump-admin_api_key_manager-${VERSION}"
             # If branch already exists remote, skip (PR already open for this version)
             if git ls-remote --heads origin "$BRANCH" | grep -q "$BRANCH"; then
@@ -149,11 +172,8 @@ jobs:
             echo "  pubspec after:"
             grep -A2 "admin_api_key_manager" pubspec.yaml | head -5 || true
 
-            # Update CHANGELOG hint if repo has one (optional)
-            if [ -f "CHANGELOG.md" ]; then
-              echo "" >> CHANGELOG.md
-              echo "Updated via admin_api_key_manager $VERSION" >> CHANGELOG.md || true
-            fi
+            # No CHANGELOG edit: a line pushed into the consumer's own changelog
+            # is noise that hides the real entries.
 
             git config user.name "keshab-flutter-assistant"
             git config user.email "Keshab1997@users.noreply.github.com"
@@ -171,19 +191,26 @@ jobs:
 
             git push -u origin "$BRANCH"
 
+            # The default branch, not a hard-coded `master`: quizbaaz is on
+            # `main`, so every PR attempt there failed with "base not found".
+            BASE=$(gh repo view "$REPO" --json defaultBranchRef -q .defaultBranchRef.name 2>/dev/null || echo "")
+            if [ -z "$BASE" ]; then BASE="master"; fi
+            echo "  base branch: $BASE"
+
             # Open PR — if one already exists GitHub returns 422, we treat as skip
             gh pr create \
               --repo "$REPO" \
               --title "chore(deps): bump admin_api_key_manager to $VERSION" \
-              --body "Automated bump from **Keshab1997/admin_api_key_manager@$VERSION**.
+              --body "Automated bump to **Keshab1997/admin_api_key_manager@$VERSION** ($GITHUB_SHA).
 
-            - Premium design overhaul (1.6.0) + Test fast (1.6.1): indigo header, premium cards, 8s timeout + spinner
-            - Diff: https://github.com/Keshab1997/admin_api_key_manager/compare/..@$VERSION
+            - What changed: https://github.com/Keshab1997/admin_api_key_manager/blob/master/CHANGELOG.md
+
+            For a \`git:\` dependency this PR touches only \`pubspec.lock\` — that file, not \`ref: master\`, is what \`flutter pub get\` obeys, so an app can otherwise keep building a months-old copy while master moves on.
 
             Merge when ready — CI will run \`flutter analyze\` / \`flutter test\` in this app.
 
             _Workflow: \`.github/workflows/downstream-pr.yml\` in admin_api_key_manager_" \
-              --base master \
+              --base "$BASE" \
               --head "$BRANCH" || echo "  PR already exists or cannot create — check $REPO"
 
             cd - >/dev/null

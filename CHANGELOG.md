@@ -4,6 +4,25 @@ All notable changes to `admin_api_key_manager` are documented here.
 This package follows [Keep a Changelog](https://keepachangelog.com/) and
 uses [Semantic Versioning](https://semver.org/).
 
+## 1.7.2 — 2026-11-27
+
+### Fixed
+- **Catalog timeout 15 s → 30 s.** The payload is ~900 kB of JSON; a 15 s ceiling
+  expired mid-download on a weak mobile connection, so the screen showed its
+  error state for a fetch that would have finished. A timeout is for a hung
+  server, not for a big body.
+
+### CI
+- **`downstream-pr.yml` can now bump a `git:` dependency.** Such a dependency is
+  pinned by `pubspec.lock`'s `resolved-ref`, not by the pubspec (`ref: master`
+  already means latest), so the workflow edited a file that did not need editing,
+  produced an empty diff and skipped the repo — silently. A consumer could keep
+  building a months-old copy while master moved on, which is exactly what
+  happened to QuizBaaz. The workflow now rewrites `resolved-ref` + `version` in
+  the lock, targets the repo's *actual* default branch (`main`, not a
+  hard-coded `master`), and no longer appends a line to the consumer's own
+  CHANGELOG.
+
 ## 1.7.1 — 2026-11-27
 
 ### Fixed
@@ -24,10 +43,6 @@ uses [Semantic Versioning](https://semver.org/).
     is down.
 - Regression test added: a 1 MB exception at 320/353/390dp must render without
   an exception, keep every `Text` under 400 characters, and still offer Retry.
-- **Catalog timeout 15 s → 30 s.** The payload is ~900 kB of JSON; a 15 s
-  ceiling expired mid-download on a weak mobile connection, so the screen showed
-  its error state for a fetch that would have finished. A timeout is for a hung
-  server, not for a big body.
 
 ## 1.7.0 — 2026-11-26
 
