@@ -4,6 +4,30 @@ All notable changes to `admin_api_key_manager` are documented here.
 This package follows [Keep a Changelog](https://keepachangelog.com/) and
 uses [Semantic Versioning](https://semver.org/).
 
+## 1.7.0 — 2026-11-26
+
+### Added
+- **Free sources tab** (`lib/models/free_source.dart`, `AdminFreeModelsScreen`):
+  a hand-curated directory of where free model access comes from — first-party
+  free tiers (Google AI Studio, Groq, Cerebras, Mistral, Cloudflare Workers AI,
+  Cohere, NVIDIA NIM, GitHub Models, Hugging Face) plus gateways (OpenRouter,
+  NaraRouter). Each `FreeSource` carries the OpenAI-compatible base URL, the
+  allowance in the source's own words, `needsCard` / `needsPhone` / `relay`
+  flags, a `verifiedOn` date and a link that owns the real limits. Copy the base
+  URL, open the key page, done. The tab is static data, so it still answers when
+  the catalog fetch fails — which is exactly when you ask "where do I get a key?".
+  `filterSources()` gives case-insensitive search plus a `providersOnly` switch.
+- **`tool/free_model_radar.py`**: keyless diff of OpenRouter's public catalog
+  against `tool/free_models_snapshot.json` — `+ added` / `- gone`, `--update`,
+  `--all`, `--json`, optional `--telegram` push. No workflow file is added: a
+  scheduled job is a repo-owner decision, not something a library should install.
+
+### Changed
+- `AdminFreeModelsScreen` body is now a two-tab shell (`Catalog` / `Free
+  sources`) with the hand-rolled `_FreeModelsTabBar`; the catalog tab keeps the
+  50-per-page paging and filter behaviour from 1.6.2.
+- README documents the directory, how to add a source, and the radar.
+
 ## 1.6.2 — 2026-11-26
 
 ### Fixed

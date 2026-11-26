@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:url_launcher/url_launcher.dart' as url_launcher;
 import 'package:admin_api_key_manager/models/free_model.dart';
+import 'package:admin_api_key_manager/models/free_source.dart';
 import 'package:admin_api_key_manager/services/free_model_discovery.dart';
 import 'package:admin_api_key_manager/screens/admin_api_keys_screen.dart';
 
@@ -37,6 +38,13 @@ class _AdminFreeModelsScreenState extends State<AdminFreeModelsScreen> {
   /// finite and give the filter box something to do.
   static const int _pageSize = 50;
   int _visible = _pageSize;
+
+  /// 0 = the live OpenRouter catalog, 1 = the hand-curated directory of free
+  /// sources. The directory needs no network, so it still answers "where do I
+  /// get a free key?" when the catalog fetch has just failed.
+  int _tab = 0;
+  final _sourceSearchCtrl = TextEditingController();
+  bool _providersOnly = false;
 
   @override
   void initState() {
@@ -146,55 +154,95 @@ class _AdminFreeModelsScreenState extends State<AdminFreeModelsScreen> {
           ),
         ],
       ),
-      body: FutureBuilder<List<FreeModel>>(
-        future: _future,
-        builder: (context, snap) {
-          if (snap.connectionState != ConnectionState.done) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    width: 32,
-                    height: 32,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 3, color: palette.accent),
-                  ),
-                  const SizedBox(height: 14),
-                  Text('Fetching catalog…',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w600)),
-                ],
-              ),
-            );
-          }
-          if (snap.hasError) {
-            return _FreeModelsError(error: snap.error, onRetry: _refresh);
-          }
-          final all = snap.data ?? [];
-          return _FreeModelsList(
-            all: all,
-            searchCtrl: _searchCtrl,
-            provider: _provider,
-            freeOnly: _freeOnly,
-            visibleCount: _visible,
-            onShowMore: () => setState(
-                () => _visible += _AdminFreeModelsScreenState._pageSize),
-            // Any filter change starts a new result set at page one.
-            onProviderChanged: (v) => setState(() {
-              _provider = v;
-              _visible = _pageSize;
-            }),
-            onFreeOnlyChanged: (v) => setState(() {
-              _freeOnly = v;
-              _visible = _pageSize;
-            }),
-            onSearchChanged: (_) => setState(() => _visible = _pageSize),
-            onOpenKeyUrl: _openUrl,
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: _FreeModelsTabBar(
+              index: _tab,
+              labels: const ['Catalog', 'Free sources'],
+              onChanged: (i) => setState(() => _tab = i),
+            ),
+          ),
+          Expanded(child: _tabBody(theme, palette)),
+        ],
+      ),
+    );
+  }
+
+  Widget _tabBody(ThemeData theme, KeyAdminPalette palette) {
+    if (_tab == 1) {
+      return _FreeSourcesList(
+        searchCtrl: _sourceSearchCtrl,
+        providersOnly: _providersOnly,
+        onSearchChanged: (_) => setState(() {}),
+        onProvidersOnlyChanged: (v) => setState(() => _providersOnly = v),
+        onOpenUrl: _openUrl,
+        onCopyBaseUrl: (baseUrl) async {
+          // The base URL is what the key form asks for, and it is the one
+          // field nobody remembers. Copy it, then the add-key sheet is one
+          // paste away.
+          await Clipboard.setData(ClipboardData(text: baseUrl));
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Base URL copied — $baseUrl'),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
           );
         },
-      ),
+      );
+    }
+    return FutureBuilder<List<FreeModel>>(
+      future: _future,
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 3, color: palette.accent),
+                ),
+                const SizedBox(height: 14),
+                Text('Fetching catalog…',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600)),
+              ],
+            ),
+          );
+        }
+        if (snap.hasError) {
+          return _FreeModelsError(error: snap.error, onRetry: _refresh);
+        }
+        final all = snap.data ?? [];
+        return _FreeModelsList(
+          all: all,
+          searchCtrl: _searchCtrl,
+          provider: _provider,
+          freeOnly: _freeOnly,
+          visibleCount: _visible,
+          onShowMore: () =>
+              setState(() => _visible += _AdminFreeModelsScreenState._pageSize),
+          // Any filter change starts a new result set at page one.
+          onProviderChanged: (v) => setState(() {
+            _provider = v;
+            _visible = _pageSize;
+          }),
+          onFreeOnlyChanged: (v) => setState(() {
+            _freeOnly = v;
+            _visible = _pageSize;
+          }),
+          onSearchChanged: (_) => setState(() => _visible = _pageSize),
+          onOpenKeyUrl: _openUrl,
+        );
+      },
     );
   }
 }
@@ -831,6 +879,454 @@ class _FreeModelsError extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Two-segment switch at the top of the screen. Hand-rolled rather than
+/// [SegmentedButton] so it keeps the pill shape used across the admin screens
+/// and cannot regress with a material version bump.
+class _FreeModelsTabBar extends StatelessWidget {
+  const _FreeModelsTabBar({
+    required this.index,
+    required this.labels,
+    required this.onChanged,
+  });
+
+  final int index;
+  final List<String> labels;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final palette = KeyAdminPalette.of(context);
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.55)),
+      ),
+      child: Row(
+        children: [
+          for (var i = 0; i < labels.length; i++)
+            Expanded(
+              child: GestureDetector(
+                onTap: () => onChanged(i),
+                behavior: HitTestBehavior.opaque,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  padding: const EdgeInsets.symmetric(vertical: 9),
+                  decoration: BoxDecoration(
+                    color: i == index
+                        ? palette.accent.withValues(alpha: 0.12)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  child: Center(
+                    child: Text(
+                      labels[i],
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: i == index
+                            ? palette.accent
+                            : theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The directory of places that hand out free model access. Static data, so it
+/// renders instantly and works offline — which matters most exactly when the
+/// live catalog above it has failed.
+class _FreeSourcesList extends StatelessWidget {
+  const _FreeSourcesList({
+    required this.searchCtrl,
+    required this.providersOnly,
+    required this.onSearchChanged,
+    required this.onProvidersOnlyChanged,
+    required this.onOpenUrl,
+    required this.onCopyBaseUrl,
+  });
+
+  final TextEditingController searchCtrl;
+  final bool providersOnly;
+  final ValueChanged<String> onSearchChanged;
+  final ValueChanged<bool> onProvidersOnlyChanged;
+  final Future<void> Function(String url) onOpenUrl;
+  final Future<void> Function(String url) onCopyBaseUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final palette = KeyAdminPalette.of(context);
+    final shown = filterSources(kFreeSources,
+        query: searchCtrl.text, providersOnly: providersOnly);
+
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  controller: searchCtrl,
+                  onChanged: onSearchChanged,
+                  decoration: InputDecoration(
+                    hintText: 'Search groq, gemini, gateway…',
+                    prefixIcon: Icon(Icons.search_rounded,
+                        color: theme.colorScheme.onSurfaceVariant),
+                    suffixIcon: searchCtrl.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear_rounded, size: 18),
+                            onPressed: () {
+                              searchCtrl.clear();
+                              onSearchChanged('');
+                            },
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: theme.colorScheme.surface,
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 14),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide(
+                            color: theme.colorScheme.outlineVariant
+                                .withValues(alpha: 0.55))),
+                    enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide(
+                            color: theme.colorScheme.outlineVariant
+                                .withValues(alpha: 0.55))),
+                    focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide:
+                            BorderSide(color: palette.accent, width: 1.4)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    FilterChip(
+                      label: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                              providersOnly
+                                  ? Icons.check_circle_rounded
+                                  : Icons.circle_outlined,
+                              size: 16,
+                              color: providersOnly
+                                  ? palette.accent
+                                  : theme.colorScheme.onSurfaceVariant),
+                          const SizedBox(width: 6),
+                          const Text('First-party only',
+                              style: TextStyle(fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                      selected: providersOnly,
+                      showCheckmark: false,
+                      selectedColor: palette.accent.withValues(alpha: 0.12),
+                      backgroundColor: theme.colorScheme.surface,
+                      side: BorderSide(
+                          color: providersOnly
+                              ? palette.accent.withValues(alpha: 0.28)
+                              : theme.colorScheme.outlineVariant
+                                  .withValues(alpha: 0.6)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      onSelected: onProvidersOnlyChanged,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '${shown.length} of ${kFreeSources.length} sources',
+                        textAlign: TextAlign.right,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: palette.attention.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                        color: palette.attention.withValues(alpha: 0.25)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.info_outline_rounded,
+                          size: 15, color: palette.attentionText),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Allowances change weekly — open a source before you '
+                          'trust its number. Anything marked RELAY may log your '
+                          'prompts, so no student data there.',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                              color: palette.attentionText,
+                              height: 1.45,
+                              fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 2, 16, 96),
+          sliver: SliverList.separated(
+            itemCount: shown.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (context, i) => _FreeSourceCard(
+              source: shown[i],
+              onOpenUrl: onOpenUrl,
+              onCopyBaseUrl: onCopyBaseUrl,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FreeSourceCard extends StatelessWidget {
+  const _FreeSourceCard({
+    required this.source,
+    required this.onOpenUrl,
+    required this.onCopyBaseUrl,
+  });
+
+  final FreeSource source;
+  final Future<void> Function(String url) onOpenUrl;
+  final Future<void> Function(String url) onCopyBaseUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final palette = KeyAdminPalette.of(context);
+    final isProvider = source.kind == FreeSourceKind.provider;
+    final daily = source.dailyTokensLabel;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.55)),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 16,
+              offset: const Offset(0, 4)),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+              height: 3,
+              color: isProvider ? palette.healthy : palette.attention),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        source.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _SourcePill(
+                      label: isProvider ? 'FIRST-PARTY' : 'GATEWAY',
+                      color: isProvider ? palette.healthy : palette.attention,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    _SourcePill(
+                        label: source.freeAllowance,
+                        color: theme.colorScheme.onSurfaceVariant),
+                    if (daily != null)
+                      _SourcePill(label: daily, color: palette.accent),
+                    if (source.needsCard)
+                      _SourcePill(label: 'CARD', color: palette.danger),
+                    if (source.needsPhone)
+                      _SourcePill(label: 'PHONE', color: palette.attention),
+                    if (source.mayLogPrompts)
+                      _SourcePill(label: 'RELAY ⚠', color: palette.danger),
+                  ],
+                ),
+                if (source.note != null && source.note!.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    source.note!,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        height: 1.45),
+                  ),
+                ],
+                if (source.baseUrl != null) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest
+                          .withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                          color: theme.colorScheme.outlineVariant
+                              .withValues(alpha: 0.35)),
+                    ),
+                    child: Text(
+                      source.baseUrl!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                          fontFamily: 'monospace',
+                          fontFamilyFallback: const ['Roboto Mono', 'Courier'],
+                          color: theme.colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    if (source.baseUrl != null)
+                      Flexible(
+                        child: OutlinedButton.icon(
+                          onPressed: () => onCopyBaseUrl(source.baseUrl!),
+                          icon: const Icon(Icons.copy_rounded, size: 15),
+                          label: const Text('Copy URL',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontWeight: FontWeight.w700)),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(11)),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                      ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: FilledButton.icon(
+                        onPressed: () =>
+                            onOpenUrl(source.keyUrl ?? source.infoUrl),
+                        icon: const Icon(Icons.key_rounded, size: 15),
+                        label: Text(source.keyUrl != null ? 'Get key' : 'Open',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w800)),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: palette.accent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 8),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(11)),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      tooltip: 'Limits & docs',
+                      onPressed: () => onOpenUrl(source.infoUrl),
+                      icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'checked ${source.verifiedOn}',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant
+                          .withValues(alpha: 0.8),
+                      fontSize: 10),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SourcePill extends StatelessWidget {
+  const _SourcePill({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: color.withValues(alpha: 0.20)),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.3,
+          color: color,
         ),
       ),
     );

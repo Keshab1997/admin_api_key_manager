@@ -320,6 +320,56 @@ Navigator.of(context).push(
 
 The AppBar of `AdminApiKeysScreen` already has a 🔍 *Free models* button — no extra wiring needed. For a cached catalogue, wrap `FreeModelDiscovery().fetchFree()` in your own Cloud Function / Firestore doc and pass the list in.
 
+### Free sources — where the free keys actually come from
+
+The screen has two tabs. **Catalog** is the live OpenRouter list above; **Free
+sources** is `lib/models/free_source.dart`, a hand-curated directory of the
+places that hand out free model access — first-party free tiers (Google AI
+Studio, Groq, Cerebras, Mistral, Cloudflare Workers AI, Cohere, NVIDIA NIM,
+GitHub Models, Hugging Face) and gateways (OpenRouter, NaraRouter).
+
+The directory is deliberately *data, not scraping*: every entry carries the
+OpenAI-compatible base URL, a link to the page that owns its limits, and the day
+a human last checked it. Allowances move weekly — NaraRouter cut its free plan
+from ten models to one inside a fortnight — so the number in the chip is a
+snapshot and the link is the truth. Anything that is not first-party is flagged
+`RELAY ⚠`, because a gateway forwarding your prompt upstream may log or train on
+it; no student data belongs there.
+
+Adding a source is one `const` entry:
+
+```dart
+FreeSource(
+  id: 'my-gateway',
+  name: 'My Gateway',
+  kind: FreeSourceKind.gateway,
+  freeAllowance: '2M tokens/day',
+  baseUrl: 'https://api.my-gateway.dev/v1',
+  keyUrl: 'https://api.my-gateway.dev/keys',
+  infoUrl: 'https://api.my-gateway.dev/docs/limits',
+  dailyTokens: 2000000,
+  relay: true,
+  verifiedOn: '2026-11-26',
+),
+```
+
+### Watching the catalog without opening the app
+
+`tool/free_model_radar.py` answers "did anything new appear while I was not
+looking?" — no key, no dependency, cron-shaped:
+
+```bash
+python3 tool/free_model_radar.py            # + new / - gone since the snapshot
+python3 tool/free_model_radar.py --update   # accept today's catalog as the baseline
+python3 tool/free_model_radar.py --all      # every free model with its context
+python3 tool/free_model_radar.py --telegram # push the news (needs TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID)
+```
+
+It compares `tool/free_models_snapshot.json` with the live catalog and prints
+nothing when nothing changed, so it can sit behind any scheduler you already
+run. It does **not** ship a workflow file: a scheduled job is the repo owner's
+call, not something a library adds behind your back.
+
 ## Example
 
 A runnable host app lives in [`example/`](example/) — `Firebase.initializeApp()` → `Hive.initFlutter()` → `ApiKeyManager.instance.initialize()` with three buttons for the admin screens. See [`example/README.md`](example/README.md).

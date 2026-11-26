@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:admin_api_key_manager/models/free_source.dart';
 import 'package:admin_api_key_manager/screens/admin_free_models_screen.dart';
 import 'package:admin_api_key_manager/services/free_model_discovery.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -112,6 +113,65 @@ void main() {
       discovery.close();
     }
     tester.view.reset();
+  });
+
+  testWidgets('the Free sources tab answers even when the catalog fails',
+      (tester) async {
+    // The directory is static data: when OpenRouter is down or the phone is
+    // offline, "where do I get a free key?" must still have an answer.
+    tester.view.physicalSize = const Size(390 * 3, 844 * 3);
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.reset);
+
+    final discovery = FreeModelDiscovery(
+      client: MockClient((_) async => http.Response('nope', 500)),
+    );
+    addTearDown(discovery.close);
+
+    await tester.pumpWidget(_app(AdminFreeModelsScreen(discovery: discovery)));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Could not load catalog'), findsOneWidget);
+
+    await tester.tap(find.text('Free sources'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('OpenRouter'), findsWidgets);
+    expect(find.text('Google AI Studio'), findsOneWidget);
+    expect(find.textContaining('Get key'), findsWidgets);
+    // The relay warning is part of the directory, not an optional extra.
+    expect(find.textContaining('RELAY'), findsWidgets);
+    // The trickier entries further down the list: gateways are still listed,
+    // and the daily-token pill is covered by test/free_source_test.dart.
+    expect(find.textContaining('of ${kFreeSources.length} sources'),
+        findsOneWidget);
+  });
+
+  testWidgets('the sources tab filters to first-party providers',
+      (tester) async {
+    tester.view.physicalSize = const Size(360 * 3, 800 * 3);
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.reset);
+
+    final discovery = _fakeCatalog(10);
+    addTearDown(discovery.close);
+
+    await tester.pumpWidget(_app(AdminFreeModelsScreen(discovery: discovery)));
+    await tester.pump();
+    await tester.pump();
+    await tester.tap(find.text('Free sources'));
+    await tester.pump();
+
+    await tester.tap(find.text('First-party only'));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+
+    await tester.enterText(find.byType(TextField).last, 'nararouter');
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(find.text('No models match'), findsNothing);
   });
 
   testWidgets('search filters the list in place', (tester) async {
