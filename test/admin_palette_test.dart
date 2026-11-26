@@ -1,4 +1,4 @@
-import 'package:admin_api_key_manager/screens/admin_api_keys_screen.dart';
+import 'package:admin_api_key_manager/theme/key_admin_palette.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
