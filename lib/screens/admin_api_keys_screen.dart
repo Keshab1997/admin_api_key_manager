@@ -9,7 +9,7 @@ import 'package:admin_api_key_manager/services/key_cache.dart';
 import 'package:admin_api_key_manager/services/free_model_discovery.dart';
 import 'package:admin_api_key_manager/services/key_health_checker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:admin_api_key_manager/theme/key_admin_palette.dart';
 import 'package:admin_api_key_manager/screens/widgets/admin_screen_widgets.dart';
 export 'package:admin_api_key_manager/theme/key_admin_palette.dart';
@@ -539,7 +539,9 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen>
           KeyAdminPalette.of(context).danger,
         ),
     };
-    showDialog(
+    // Fire-and-forget: nothing here reads the dialog's result, and awaiting it
+    // would hold the key-test caller open until the admin dismisses the dialog.
+    unawaited(showDialog(
       context: context,
       builder: (ctx) {
         return AlertDialog(
@@ -586,7 +588,7 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen>
           ],
         );
       },
-    );
+    ));
   }
 
   void _edit(AdminApiKey k) {

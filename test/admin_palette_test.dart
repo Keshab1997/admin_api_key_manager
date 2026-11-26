@@ -1,5 +1,5 @@
 import 'package:admin_api_key_manager/theme/key_admin_palette.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Reads [KeyAdminPalette.of] through a real context, once per pumped theme.

@@ -4,6 +4,44 @@ All notable changes to `admin_api_key_manager` are documented here.
 This package follows [Keep a Changelog](https://keepachangelog.com/) and
 uses [Semantic Versioning](https://semver.org/).
 
+## 1.7.3 — 2026-11-27
+
+### Fixed
+- **The admin screens no longer crash in a host app that uses the framework's
+  material.** 1.7.2's screens imported `package:material_ui/material_ui.dart`
+  (commit `7767893`), which is a *separate copy* of material with its own
+  `Text`, `TextStyle`, `ThemeData`, `Theme` and `MaterialLocalizations` types.
+  A host on `package:flutter/material.dart` supplies the framework's
+  `MaterialLocalizations`, so `material_ui`'s `TextField` found none and threw:
+
+  ```
+  Null check operator used on a null value
+  #0  MaterialLocalizations.of (material_ui/src/material_localizations.dart)
+  #1  TextFieldState._getEffectiveDecoration (material_ui/src/text_field.dart)
+  ```
+
+  That is *every* `TextField`, so on the phone it read as "adding a key does
+  nothing, testing a key does nothing, and Free models is a blank page". The
+  import is back on `package:flutter/material.dart`, and `material_ui` is gone
+  from `pubspec.yaml` — this package must not assume it owns the host's
+  Material setup, and it does not get to pick the host's material library.
+  Reverting also restores the host's `ThemeData`, which `material_ui` cannot
+  accept (a `ThemeExtension` from the host does not type-match its `ThemeData`),
+  so the screens render in the host theme again rather than a fallback palette.
+
+  The deprecation is handled instead of chased: `deprecated_member_use` is
+  ignored in `analysis_options.yaml` with the reasoning written down, the way
+  the host apps already do it. `package:flutter/material.dart` is deprecated in
+  favour of `material_ui`, but the migration has to happen in the host app and
+  this package in **one** change; half a migration is what broke it.
+
+### Added
+- **`test/host_material_compat_test.dart`** — the regression test the suite was
+  missing. Every other screen test pumps a `material_ui` `MaterialApp`, so all
+  of them passed while every host app was broken. This one pumps the screens
+  under a framework `MaterialApp` with framework localization delegates and
+  fails with `No MaterialLocalizations found` if the imports ever drift back.
+
 ## 1.7.2 — 2026-11-27
 
 ### Fixed

@@ -6,7 +6,7 @@ import 'package:admin_api_key_manager/services/free_model_discovery.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:flutter/material.dart';
 
 /// A catalog shaped like OpenRouter's real answer: hundreds of entries, long
 /// descriptions, free and paid mixed, a couple of odd ids. The screen has to

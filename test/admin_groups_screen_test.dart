@@ -2,7 +2,7 @@ import 'package:admin_api_key_manager/models/admin_api_key.dart';
 import 'package:admin_api_key_manager/models/admin_key_group.dart';
 import 'package:admin_api_key_manager/screens/admin_key_groups_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:flutter/material.dart';
 
 void main() {
   group('provider coverage', () {

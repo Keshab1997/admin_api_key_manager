@@ -7,6 +7,26 @@
 include: package:flutter_lints/flutter.yaml
 
 analyzer:
+  errors:
+    # Flutter 3.47+ (stable 3.50) deprecated package:flutter/material.dart in
+    # favor of package:material_ui. This package must NOT follow that migration
+    # yet: material_ui is a separate copy of material with its own `Text` API,
+    # `ThemeData`, `Theme` and `MaterialLocalizations` types, so a screen built
+    # on it is only usable under a host MaterialApp that also uses material_ui.
+    # Host apps on package:flutter/material.dart (quizbaaz, and every consumer
+    # pinned before the migration) then hit:
+    #
+    #   Null check operator used on a null value
+    #   MaterialLocalizations.of (material_ui/src/material_localizations.dart)
+    #   TextFieldState._getEffectiveDecoration (material_ui/src/text_field.dart)
+    #
+    # on every TextField - which is how "add key / test key / Free models do
+    # nothing" reached the phone. Flutter's own `ThemeData` is not usable either,
+    # because a ThemeExtension carrying the host's theme does not type-match
+    # material_ui's ThemeData. So the deprecation is correct in direction and
+    # wrong in timing: migrate when the host app migrates, in one change, and
+    # delete this ignore in the same commit.
+    deprecated_member_use: ignore
   exclude:
     - build/**
   language:

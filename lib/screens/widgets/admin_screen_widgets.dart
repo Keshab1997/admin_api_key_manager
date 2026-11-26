@@ -1,4 +1,4 @@
-import 'package:material_ui/material_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:admin_api_key_manager/models/admin_api_key.dart';
 import 'package:admin_api_key_manager/services/key_pool_errors.dart';
 import 'package:admin_api_key_manager/theme/key_admin_palette.dart';

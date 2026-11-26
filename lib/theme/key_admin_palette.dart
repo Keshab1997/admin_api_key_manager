@@ -1,4 +1,4 @@
-import 'package:material_ui/material_ui.dart';
+import 'package:flutter/material.dart';
 
 /// State + accent colours for the admin screens, as a [ThemeExtension] so the
 /// host theme owns them and a host can supply its own without forking.

@@ -3,7 +3,7 @@ import 'package:admin_api_key_manager/models/admin_key_group.dart';
 import 'package:admin_api_key_manager/services/api_key_manager.dart';
 import 'package:admin_api_key_manager/theme/key_admin_palette.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:flutter/material.dart';
 
 /// Per-provider settings for the key pool, stored in Firestore
 /// `admin_key_groups` (doc id = provider).
