@@ -336,10 +336,10 @@ down here is never touched).
   docify via `git:`.
 - **App directory:** `.` — the package root is the repository root.
 - **Branch:** `master` is the default branch and the one every app pins.
-  `main` exists and is **stale**: it carries three commits that never reached
-  `master` (`63c1f12`, `3fa9fb6`, `858c6ca` — an admin-screen UX rewrite).
-  Do not resurrect it or merge it without Keshab saying so; it predates the
-  v1.2 provider-defaults work and merging it would revert it.
+  `main` was stale (three commits `63c1f12`, `3fa9fb6`, `858c6ca` — an
+  admin-screen UX rewrite predating the v1.2 provider-defaults work) and was
+  archived as tag `archive/main-2026-10-05` and deleted on 2026-11-26. Do not
+  recreate `main` without a migration reason; `master` is canonical.
 - **Extra project rules:**
   - A library, not an app: keep `pubspec.lock` out of git (a committed lock
     pins the *package's* dev graph and turns host-app resolution conflicts into
