@@ -29,6 +29,16 @@ class KeyCache {
     return _box!;
   }
 
+  /// Closes the Hive box. Called by [ApiKeyManager.dispose] so a later
+  /// `initialize()` can re-open it cleanly (testable, and avoids leaking
+  /// the box across hot-restarts in tests).
+  static Future<void> close() async {
+    if (Hive.isBoxOpen(_boxName)) {
+      await Hive.box(_boxName).close();
+    }
+    _box = null;
+  }
+
   // ── Admin API keys cache ──
 
   static List<AdminApiKey> getCachedAdminKeys() {

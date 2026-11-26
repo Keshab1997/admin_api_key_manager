@@ -54,8 +54,9 @@ class ApiKeyManager {
   /// Consecutive 401/403 failures per key. Reaching [_consecutiveAuthFailureLimit]
   /// auto-deactivates the key globally (see [_deactivateKey]).
   final Map<String, int> _consecutiveAuthFailures = {};
+  final Map<String, DateTime> _lastHealthCheckFailure = {};
   DateTime? _lastLogCleanup;
-  final Completer<void> _readyCompleter = Completer<void>();
+  Completer<void> _readyCompleter = Completer<void>();
   int _currentIndex = 0;
   bool _allKeysFailedNotified = false;
   DateTime? _lastAllKeysFailedNotification;
@@ -231,12 +232,36 @@ class ApiKeyManager {
         debugPrint('[ApiKeyManager] Health check ${key.name}: HTTP $status');
         if (status == 200) {
           _consecutiveAuthFailures.remove(key.id);
+          _lastHealthCheckFailure.remove(key.id);
         } else if (status == 401 || status == 403) {
-          // Every device pings, so dedupe by the key's last reported error.
+          // Every device pings, so dedupe by both Firestore lastErrorAt and a
+          // local timestamp. Firestore time can be skewed vs device time, and
+          // lastErrorAt is only updated after a real user failure — without the
+          // local map, 10 devices would each log the same dead key every 30 min.
+          final now = DateTime.now();
           final lastError = key.lastErrorAt;
-          if (lastError == null ||
-              DateTime.now().difference(lastError) > _healthCheckDedup) {
-            reportFailure(key, status, 'health_check', '');
+          final lastLocal = _lastHealthCheckFailure[key.id];
+          final firestoreDedup = lastError == null ||
+              now.difference(lastError) > _healthCheckDedup;
+          final localDedup = lastLocal == null ||
+              now.difference(lastLocal) > _healthCheckDedup;
+          if (firestoreDedup && localDedup) {
+            _lastHealthCheckFailure[key.id] = now;
+            // Apply cooldown + auth tracking without polluting api_error_logs.
+            // reportFailure would enqueue a doc with userId='' and feature
+            // 'health_check' that mixes with real user errors in the admin
+            // panel and inflates error counts.
+            final duration = _getCooldownDuration(status, key.provider);
+            _cooldownList.add(
+              KeyCooldown(keyId: key.id, until: now.add(duration)),
+            );
+            _cooldownList.removeWhere((c) => c.until.isBefore(now));
+            _saveCooldownsToCache();
+            unawaited(_updateKeyStats(key.id, lastErrorAt: now));
+            _recordAuthFailure(key);
+            if (_getHealthyKeys().isEmpty) {
+              _handleAllKeysFailed();
+            }
           }
         }
         // status 0 (network) and everything else: transient — don't act.
@@ -248,9 +273,17 @@ class ApiKeyManager {
     }());
   }
 
-  /// Returns health stats for all keys (for admin dashboard).
+  /// Returns health stats for all keys (for admin dashboard), sorted by
+  /// (group priority, key priority) so the order matches selection order.
   List<Map<String, dynamic>> getKeyHealth() {
-    return _keyPool.map((k) {
+    final sorted = List<AdminApiKey>.from(_keyPool)
+      ..sort((a, b) {
+        final gp =
+            _groupPriority(a.provider).compareTo(_groupPriority(b.provider));
+        if (gp != 0) return gp;
+        return a.priority.compareTo(b.priority);
+      });
+    return sorted.map((k) {
       final until = cooldownUntil(k.id);
       return {
         'id': k.id,
@@ -285,7 +318,16 @@ class ApiKeyManager {
     return latest;
   }
 
-  void refreshKeys() {
+  @Deprecated(
+      'Use refreshFromCache instead. This only reloads the local Hive cache, not Firestore.')
+  void refreshKeys() => refreshFromCache();
+
+  /// Reloads the key pool from the local Hive cache.
+  ///
+  /// The Firestore listener is the source of truth; this only re-reads what
+  /// was last cached (e.g. after an external cache write in tests). For live
+  /// data, rely on the snapshot listener — no manual Firestore fetch is needed.
+  void refreshFromCache() {
     _loadFromCache();
   }
 
@@ -310,12 +352,44 @@ class ApiKeyManager {
     _batchTimer?.cancel();
     _healthCheckTimer?.cancel();
     _notificationCooldownTimer?.cancel();
+    unawaited(KeyCache.close());
+    _keyPool = [];
+    _groups = {};
+    _cooldownList.clear();
+    _consecutiveAuthFailures.clear();
+    _lastHealthCheckFailure.clear();
+    _errorQueue.clear();
+    _currentIndex = 0;
+    _allKeysFailedNotified = false;
+    _lastAllKeysFailedNotification = null;
+    _lastLogCleanup = null;
+    _healthCheckInProgress = false;
+    _initializing = null;
+    _readyCompleter = Completer<void>();
     // Re-armable: without this, `initialize()` after a `dispose()` would return
     // early and leave the manager permanently dead with every timer gone.
     _initialized = false;
   }
 
   // ── Private ──
+
+  int _groupPriority(String provider) => _groups[provider]?.priority ?? 100;
+
+  void _sortKeyPool() {
+    _keyPool.sort((a, b) {
+      final gp =
+          _groupPriority(a.provider).compareTo(_groupPriority(b.provider));
+      if (gp != 0) return gp;
+      return a.priority.compareTo(b.priority);
+    });
+  }
+
+  void _pruneCooldowns() {
+    final now = DateTime.now();
+    _cooldownList.removeWhere(
+      (c) => c.until.isBefore(now) || !_keyPool.any((k) => k.id == c.keyId),
+    );
+  }
 
   void _startFirestoreListener() {
     _firestoreSub = FirebaseFirestore.instance
@@ -325,8 +399,10 @@ class ApiKeyManager {
       _keyPool = snapshot.docs
           .map((doc) => AdminApiKey.fromMap(doc.data(), doc.id))
           .where((k) => k.isActive)
-          .toList()
-        ..sort((a, b) => a.priority.compareTo(b.priority));
+          .toList();
+      _sortKeyPool();
+      _pruneCooldowns();
+      _saveCooldownsToCache();
 
       _saveToCache();
       if (!_readyCompleter.isCompleted) _readyCompleter.complete();
@@ -342,6 +418,7 @@ class ApiKeyManager {
       final cached = KeyCache.getCachedAdminKeys();
       if (cached.isNotEmpty) {
         _keyPool = cached;
+        _sortKeyPool();
         if (!_readyCompleter.isCompleted) _readyCompleter.complete();
         debugPrint('[ApiKeyManager] Loaded ${_keyPool.length} keys from cache');
       }
@@ -424,8 +501,14 @@ class ApiKeyManager {
   /// to hit the failure threshold does the deactivation.
   Future<void> _deactivateKey(String keyId) async {
     _consecutiveAuthFailures.remove(keyId);
+    _lastHealthCheckFailure.remove(keyId);
     // Drop from the local pool so this device stops using it immediately.
     _keyPool = _keyPool.where((k) => k.id != keyId).toList();
+    // A deactivated key must not keep a 365-day cooldown that survives app
+    // restarts via Hive — the key is gone, its cooldown is meaningless and
+    // would otherwise leak forever.
+    _cooldownList.removeWhere((c) => c.keyId == keyId);
+    _saveCooldownsToCache();
     _saveToCache();
     try {
       await FirebaseFirestore.instance
@@ -461,6 +544,7 @@ class ApiKeyManager {
         for (final doc in snapshot.docs)
           doc.id: AdminKeyGroup.fromMap(doc.data(), doc.id),
       };
+      _sortKeyPool();
       debugPrint('[ApiKeyManager] Groups updated: ${_groups.length}');
     }, onError: (e) {
       debugPrint('[ApiKeyManager] Groups listener error: $e');

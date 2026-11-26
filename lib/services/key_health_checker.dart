@@ -6,7 +6,7 @@ import 'package:http/http.dart' as http;
 /// OpenRouter rejects. Map a bare name to the right provider prefix when the
 /// request targets OpenRouter; leave every other backend untouched.
 String resolveOpenRouterModel(String baseUrl, String model) {
-  if (!baseUrl.contains('openrouter')) return model;
+  if (!baseUrl.toLowerCase().contains('openrouter')) return model;
   if (model.contains('/')) return model; // already provider-prefixed
   const providerByPrefix = <String, String>{
     'claude': 'anthropic/',
@@ -32,6 +32,14 @@ String resolveOpenRouterModel(String baseUrl, String model) {
   return model;
 }
 
+String _normalizeBaseUrl(String baseUrl) {
+  var url = baseUrl.trim();
+  while (url.endsWith('/')) {
+    url = url.substring(0, url.length - 1);
+  }
+  return url;
+}
+
 /// Lightweight provider ping (a 5-token "Hi") that returns the raw HTTP status
 /// code so callers can tell an auth error (401/403) from a transient
 /// rate-limit (429), server (5xx) or network (0) problem. Used by the periodic
@@ -43,9 +51,10 @@ Future<int> pingKeyStatus({
   required String model,
 }) async {
   try {
+    final normalizedBase = _normalizeBaseUrl(baseUrl);
     if (provider == 'google') {
-      final url =
-          Uri.parse('$baseUrl/models/$model:generateContent?key=$apiKey');
+      final url = Uri.parse(
+          '$normalizedBase/models/$model:generateContent?key=$apiKey');
       final response = await http
           .post(
             url,
@@ -65,7 +74,7 @@ Future<int> pingKeyStatus({
           .timeout(const Duration(seconds: 15));
       return response.statusCode;
     }
-    final url = Uri.parse('$baseUrl/chat/completions');
+    final url = Uri.parse('$normalizedBase/chat/completions');
     final response = await http
         .post(
           url,
