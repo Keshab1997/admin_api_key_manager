@@ -44,7 +44,8 @@ class AdminApiKeysScreen extends StatefulWidget {
   State<AdminApiKeysScreen> createState() => _AdminApiKeysScreenState();
 }
 
-class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
+class _AdminApiKeysScreenState extends State<AdminApiKeysScreen>
+    with SingleTickerProviderStateMixin {
   final _nameCtrl = TextEditingController();
   final _keyCtrl = TextEditingController();
   // Start on a real provider rather than 'custom' with OpenRouter's URL
@@ -472,6 +473,12 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      useSafeArea: true,
       builder: (sheetContext) => StatefulBuilder(
         builder: (context, setSheetState) {
           final theme = Theme.of(context);
@@ -480,309 +487,346 @@ class _AdminApiKeysScreenState extends State<AdminApiKeysScreen> {
           final urlIsCustom =
               defaults != null && _baseUrlCtrl.text.trim() != defaults.baseUrl;
 
-          return Padding(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-              left: 20,
-              right: 20,
-              top: 4,
+          return TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: 1),
+            duration: const Duration(milliseconds: 280),
+            curve: Curves.easeOutCubic,
+            builder: (context, v, child) => Opacity(
+              opacity: v,
+              child: Transform.translate(
+                offset: Offset(0, 16 * (1 - v)),
+                child: child,
+              ),
             ),
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 42,
-                        height: 42,
+            child: Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+                left: 20,
+                right: 20,
+                top: 4,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // subtle drag handle accent
+                    Center(
+                      child: Container(
+                        width: 36,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 12),
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                              colors: [palette.accent, const Color(0xFF8B8CF8)],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight),
-                          borderRadius: BorderRadius.circular(12),
+                          color: theme.colorScheme.outlineVariant
+                              .withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(99),
                         ),
-                        child: Icon(
-                            existing != null
-                                ? Icons.edit_rounded
-                                : Icons.add_rounded,
-                            color: Colors.white,
-                            size: 22),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                  existing != null
-                                      ? 'Edit API key'
-                                      : 'Add API key',
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: -0.3)),
-                              Text(
-                                _provider == 'custom'
-                                    ? 'Any endpoint that speaks /chat/completions.'
-                                    : 'Stored in Firestore · available to every device',
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                    fontWeight: FontWeight.w600),
-                              ),
-                            ]),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-                  const _SheetSectionLabel(label: 'Key details'),
-
-                  TextField(
-                    controller: _nameCtrl,
-                    textCapitalization: TextCapitalization.words,
-                    decoration: InputDecoration(
-                      labelText: 'Name',
-                      hintText: 'Primary OpenRouter',
-                      prefixIcon: Icon(Icons.label_outline_rounded,
-                          size: 18, color: theme.colorScheme.onSurfaceVariant),
-                      filled: true,
-                      fillColor: theme.colorScheme.surfaceContainerHighest
-                          .withValues(alpha: 0.45),
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                              color: theme.colorScheme.outlineVariant
-                                  .withValues(alpha: 0.5))),
-                      enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                              color: theme.colorScheme.outlineVariant
-                                  .withValues(alpha: 0.45))),
-                      focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide:
-                              BorderSide(color: palette.accent, width: 1.4)),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _keyCtrl,
-                    obscureText: true,
-                    enableSuggestions: false,
-                    autocorrect: false,
-                    decoration: InputDecoration(
-                      labelText: 'API key',
-                      hintText: 'sk-or-…',
-                      prefixIcon: Icon(Icons.vpn_key_outlined,
-                          size: 18, color: theme.colorScheme.onSurfaceVariant),
-                      helperText: 'Hidden while typing. Test it before saving.',
-                      filled: true,
-                      fillColor: theme.colorScheme.surfaceContainerHighest
-                          .withValues(alpha: 0.45),
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                              color: theme.colorScheme.outlineVariant
-                                  .withValues(alpha: 0.5))),
-                      enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                              color: theme.colorScheme.outlineVariant
-                                  .withValues(alpha: 0.45))),
-                      focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide:
-                              BorderSide(color: palette.accent, width: 1.4)),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Provider first: it decides what the two fields below
-                  // should contain, so choosing it afterwards reads backwards.
-                  DropdownButtonFormField<String>(
-                    initialValue: _provider,
-                    decoration: InputDecoration(
-                      labelText: 'Provider',
-                      filled: true,
-                      fillColor: theme.colorScheme.surfaceContainerHighest
-                          .withValues(alpha: 0.45),
-                      prefixIcon: Icon(Icons.hub_outlined,
-                          size: 18, color: theme.colorScheme.onSurfaceVariant),
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                              color: theme.colorScheme.outlineVariant
-                                  .withValues(alpha: 0.5))),
-                      enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                              color: theme.colorScheme.outlineVariant
-                                  .withValues(alpha: 0.45))),
-                      focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide:
-                              BorderSide(color: palette.accent, width: 1.4)),
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                          value: 'openrouter', child: Text('OpenRouter')),
-                      DropdownMenuItem(
-                          value: 'google', child: Text('Google AI Studio')),
-                      DropdownMenuItem(
-                          value: 'custom',
-                          child: Text('Custom (OpenAI-compatible)')),
-                    ],
-                    onChanged: (v) {
-                      final provider = v ?? 'custom';
-                      final changed = _applyProviderDefaults(provider);
-                      setSheetState(() => _provider = provider);
-                      setState(() {});
-                      _saveFormDraft();
-                      if (changed) {
-                        _toast('Base URL and model set for '
-                            '${AdminApiKey.providerName(provider)}');
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 12),
-
-                  TextField(
-                    controller: _baseUrlCtrl,
-                    onChanged: (_) => setSheetState(() {}),
-                    keyboardType: TextInputType.url,
-                    decoration: InputDecoration(
-                      labelText: 'Base URL',
-                      prefixIcon: Icon(Icons.link_rounded,
-                          size: 18, color: theme.colorScheme.onSurfaceVariant),
-                      filled: true,
-                      fillColor: theme.colorScheme.surfaceContainerHighest
-                          .withValues(alpha: 0.45),
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                              color: theme.colorScheme.outlineVariant
-                                  .withValues(alpha: 0.5))),
-                      enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                              color: theme.colorScheme.outlineVariant
-                                  .withValues(alpha: 0.45))),
-                      focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide:
-                              BorderSide(color: palette.accent, width: 1.4)),
-                      helperText: _provider == 'google'
-                          ? 'Include the API version, e.g. …/v1beta'
-                          : _provider == 'custom'
-                              ? 'Any endpoint serving /chat/completions'
-                              : null,
-                      // Only offered when the admin has typed something of
-                      // their own — never as a nag on the normal path.
-                      suffixIcon: urlIsCustom
-                          ? IconButton(
-                              tooltip: 'Use the '
-                                  '${AdminApiKey.providerName(_provider)} default',
-                              icon: const Icon(Icons.restart_alt, size: 20),
-                              onPressed: () {
-                                _applyProviderDefaults(_provider, force: true);
-                                setSheetState(() {});
-                              },
-                            )
-                          : null,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _modelCtrl,
-                    onChanged: (_) => setSheetState(() {}),
-                    decoration: InputDecoration(
-                      labelText: 'Model',
-                      hintText: 'e.g. openai/gpt-4o-mini',
-                      prefixIcon: Icon(Icons.memory_outlined,
-                          size: 18, color: theme.colorScheme.onSurfaceVariant),
-                      filled: true,
-                      fillColor: theme.colorScheme.surfaceContainerHighest
-                          .withValues(alpha: 0.45),
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                              color: theme.colorScheme.outlineVariant
-                                  .withValues(alpha: 0.5))),
-                      enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                              color: theme.colorScheme.outlineVariant
-                                  .withValues(alpha: 0.45))),
-                      focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide:
-                              BorderSide(color: palette.accent, width: 1.4)),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  TextFormField(
-                    initialValue: _priority.toString(),
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      labelText: 'Priority',
-                      helperText: 'Lower is tried first · 1 is highest.',
-                      prefixIcon: Icon(Icons.low_priority_rounded,
-                          size: 18, color: theme.colorScheme.onSurfaceVariant),
-                      filled: true,
-                      fillColor: theme.colorScheme.surfaceContainerHighest
-                          .withValues(alpha: 0.45),
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                              color: theme.colorScheme.outlineVariant
-                                  .withValues(alpha: 0.5))),
-                      enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                              color: theme.colorScheme.outlineVariant
-                                  .withValues(alpha: 0.45))),
-                      focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide:
-                              BorderSide(color: palette.accent, width: 1.4)),
-                    ),
-                    onChanged: (v) {
-                      _priority = int.tryParse(v) ?? 1;
-                      _saveFormDraft();
-                    },
-                  ),
-                  const SizedBox(height: 20),
-                  FilledButton(
-                    onPressed: () {
-                      Navigator.pop(sheetContext);
-                      _saveKey(existing);
-                    },
-                    style: FilledButton.styleFrom(
-                      backgroundColor: palette.accent,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                      elevation: 2,
-                    ),
-                    child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
+                    Row(
+                      children: [
+                        Container(
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                                colors: [
+                                  palette.accent,
+                                  const Color(0xFF8B8CF8)
+                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(
                               existing != null
-                                  ? Icons.check_rounded
+                                  ? Icons.edit_rounded
                                   : Icons.add_rounded,
-                              size: 18),
-                          const SizedBox(width: 8),
-                          Text(existing != null ? 'Save changes' : 'Add key',
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 0.2)),
-                        ]),
-                  ),
-                  const SizedBox(height: 8),
-                ],
+                              color: Colors.white,
+                              size: 22),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                    existing != null
+                                        ? 'Edit API key'
+                                        : 'Add API key',
+                                    style: theme.textTheme.titleMedium
+                                        ?.copyWith(
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: -0.3)),
+                                Text(
+                                  _provider == 'custom'
+                                      ? 'Any endpoint that speaks /chat/completions.'
+                                      : 'Stored in Firestore · available to every device',
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                      fontWeight: FontWeight.w600),
+                                ),
+                              ]),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    const _SheetSectionLabel(label: 'Key details'),
+
+                    TextField(
+                      controller: _nameCtrl,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: InputDecoration(
+                        labelText: 'Name',
+                        hintText: 'Primary OpenRouter',
+                        prefixIcon: Icon(Icons.label_outline_rounded,
+                            size: 18,
+                            color: theme.colorScheme.onSurfaceVariant),
+                        filled: true,
+                        fillColor: theme.colorScheme.surfaceContainerHighest
+                            .withValues(alpha: 0.45),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                                color: theme.colorScheme.outlineVariant
+                                    .withValues(alpha: 0.5))),
+                        enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                                color: theme.colorScheme.outlineVariant
+                                    .withValues(alpha: 0.45))),
+                        focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                BorderSide(color: palette.accent, width: 1.4)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _keyCtrl,
+                      obscureText: true,
+                      enableSuggestions: false,
+                      autocorrect: false,
+                      decoration: InputDecoration(
+                        labelText: 'API key',
+                        hintText: 'sk-or-…',
+                        prefixIcon: Icon(Icons.vpn_key_outlined,
+                            size: 18,
+                            color: theme.colorScheme.onSurfaceVariant),
+                        helperText:
+                            'Hidden while typing. Test it before saving.',
+                        filled: true,
+                        fillColor: theme.colorScheme.surfaceContainerHighest
+                            .withValues(alpha: 0.45),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                                color: theme.colorScheme.outlineVariant
+                                    .withValues(alpha: 0.5))),
+                        enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                                color: theme.colorScheme.outlineVariant
+                                    .withValues(alpha: 0.45))),
+                        focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                BorderSide(color: palette.accent, width: 1.4)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Provider first: it decides what the two fields below
+                    // should contain, so choosing it afterwards reads backwards.
+                    DropdownButtonFormField<String>(
+                      initialValue: _provider,
+                      decoration: InputDecoration(
+                        labelText: 'Provider',
+                        filled: true,
+                        fillColor: theme.colorScheme.surfaceContainerHighest
+                            .withValues(alpha: 0.45),
+                        prefixIcon: Icon(Icons.hub_outlined,
+                            size: 18,
+                            color: theme.colorScheme.onSurfaceVariant),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                                color: theme.colorScheme.outlineVariant
+                                    .withValues(alpha: 0.5))),
+                        enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                                color: theme.colorScheme.outlineVariant
+                                    .withValues(alpha: 0.45))),
+                        focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                BorderSide(color: palette.accent, width: 1.4)),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                            value: 'openrouter', child: Text('OpenRouter')),
+                        DropdownMenuItem(
+                            value: 'google', child: Text('Google AI Studio')),
+                        DropdownMenuItem(
+                            value: 'custom',
+                            child: Text('Custom (OpenAI-compatible)')),
+                      ],
+                      onChanged: (v) {
+                        final provider = v ?? 'custom';
+                        final changed = _applyProviderDefaults(provider);
+                        setSheetState(() => _provider = provider);
+                        setState(() {});
+                        _saveFormDraft();
+                        if (changed) {
+                          _toast('Base URL and model set for '
+                              '${AdminApiKey.providerName(provider)}');
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+
+                    TextField(
+                      controller: _baseUrlCtrl,
+                      onChanged: (_) => setSheetState(() {}),
+                      keyboardType: TextInputType.url,
+                      decoration: InputDecoration(
+                        labelText: 'Base URL',
+                        prefixIcon: Icon(Icons.link_rounded,
+                            size: 18,
+                            color: theme.colorScheme.onSurfaceVariant),
+                        filled: true,
+                        fillColor: theme.colorScheme.surfaceContainerHighest
+                            .withValues(alpha: 0.45),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                                color: theme.colorScheme.outlineVariant
+                                    .withValues(alpha: 0.5))),
+                        enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                                color: theme.colorScheme.outlineVariant
+                                    .withValues(alpha: 0.45))),
+                        focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                BorderSide(color: palette.accent, width: 1.4)),
+                        helperText: _provider == 'google'
+                            ? 'Include the API version, e.g. …/v1beta'
+                            : _provider == 'custom'
+                                ? 'Any endpoint serving /chat/completions'
+                                : null,
+                        // Only offered when the admin has typed something of
+                        // their own — never as a nag on the normal path.
+                        suffixIcon: urlIsCustom
+                            ? IconButton(
+                                tooltip: 'Use the '
+                                    '${AdminApiKey.providerName(_provider)} default',
+                                icon: const Icon(Icons.restart_alt, size: 20),
+                                onPressed: () {
+                                  _applyProviderDefaults(_provider,
+                                      force: true);
+                                  setSheetState(() {});
+                                },
+                              )
+                            : null,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _modelCtrl,
+                      onChanged: (_) => setSheetState(() {}),
+                      decoration: InputDecoration(
+                        labelText: 'Model',
+                        hintText: 'e.g. openai/gpt-4o-mini',
+                        prefixIcon: Icon(Icons.memory_outlined,
+                            size: 18,
+                            color: theme.colorScheme.onSurfaceVariant),
+                        filled: true,
+                        fillColor: theme.colorScheme.surfaceContainerHighest
+                            .withValues(alpha: 0.45),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                                color: theme.colorScheme.outlineVariant
+                                    .withValues(alpha: 0.5))),
+                        enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                                color: theme.colorScheme.outlineVariant
+                                    .withValues(alpha: 0.45))),
+                        focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                BorderSide(color: palette.accent, width: 1.4)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    TextFormField(
+                      initialValue: _priority.toString(),
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: 'Priority',
+                        helperText: 'Lower is tried first · 1 is highest.',
+                        prefixIcon: Icon(Icons.low_priority_rounded,
+                            size: 18,
+                            color: theme.colorScheme.onSurfaceVariant),
+                        filled: true,
+                        fillColor: theme.colorScheme.surfaceContainerHighest
+                            .withValues(alpha: 0.45),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                                color: theme.colorScheme.outlineVariant
+                                    .withValues(alpha: 0.5))),
+                        enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                                color: theme.colorScheme.outlineVariant
+                                    .withValues(alpha: 0.45))),
+                        focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                BorderSide(color: palette.accent, width: 1.4)),
+                      ),
+                      onChanged: (v) {
+                        _priority = int.tryParse(v) ?? 1;
+                        _saveFormDraft();
+                      },
+                    ),
+                    const SizedBox(height: 20),
+                    FilledButton(
+                      onPressed: () {
+                        Navigator.pop(sheetContext);
+                        _saveKey(existing);
+                      },
+                      style: FilledButton.styleFrom(
+                        backgroundColor: palette.accent,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        elevation: 2,
+                      ),
+                      child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                                existing != null
+                                    ? Icons.check_rounded
+                                    : Icons.add_rounded,
+                                size: 18),
+                            const SizedBox(width: 8),
+                            Text(existing != null ? 'Save changes' : 'Add key',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.2)),
+                          ]),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ),
               ),
             ),
           );
